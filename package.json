@@ -1,0 +1,129 @@
+{
+  "name": "api-manager",
+  "productName": "API Manager",
+  "version": "1.0.0",
+  "description": "Ultimate Offline Postman-Class Desktop API Development, Testing & Automation Application",
+  "author": "Manish Kumar Singh <manishkumars264@gmail.com>",
+  "license": "MIT",
+  "private": true,
+  "type": "module",
+  "main": "dist/electron/main.cjs",
+  "bin": {
+    "api-manager": "./bin/api-manager.mjs"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "scripts": {
+    "install:sandbox": "ELECTRON_SKIP_BINARY_DOWNLOAD=1 npm install",
+    "dev": "npm run build:renderer && node --experimental-strip-types scripts/dev.mjs",
+    "build": "npm run build:renderer && npm run build:node",
+    "build:renderer": "vite build --config vite.renderer.config.ts",
+    "build:node": "node scripts/build-node.mjs",
+    "typecheck": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.web.json --noEmit",
+    "test": "vitest run",
+    "test:unit": "vitest run tests/unit",
+    "test:integration": "vitest run tests/integration",
+    "test:ui": "vitest run tests/ui",
+    "test:e2e": "playwright test",
+    "cli": "node bin/api-manager.mjs",
+    "hub": "node --experimental-strip-types src/runtime/start-hub.ts",
+    "start": "npm run build && node dist/hub/hub.cjs",
+    "package": "npm run build && electron-builder",
+    "package:dir": "npm run build && electron-builder --dir"
+  },
+  "dependencies": {
+    "@grpc/grpc-js": "^1.12.2",
+    "@xmldom/xmldom": "^0.9.5",
+    "adm-zip": "^0.5.16",
+    "ajv": "^8.17.1",
+    "commander": "^12.1.0",
+    "diff": "^5.2.0",
+    "fast-xml-parser": "^4.5.0",
+    "jose": "^5.9.6",
+    "jsonpath-plus": "^10.2.0",
+    "mime-types": "^2.1.35",
+    "mqtt": "^5.10.1",
+    "nanoid": "^5.0.8",
+    "protobufjs": "^7.4.0",
+    "socket.io-client": "^4.8.1",
+    "socks": "^2.8.3",
+    "sql.js": "^1.14.2",
+    "tough-cookie": "^5.0.0",
+    "undici": "^6.21.0",
+    "ws": "^8.18.0",
+    "xpath": "^0.0.34",
+    "yaml": "^2.6.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@testing-library/jest-dom": "^6.6.3",
+    "@testing-library/react": "^16.1.0",
+    "@testing-library/user-event": "^14.5.2",
+    "@types/adm-zip": "^0.5.7",
+    "@types/diff": "^5.2.2",
+    "@types/mime-types": "^2.1.4",
+    "@types/node": "^22.10.0",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@types/ws": "^8.5.13",
+    "@vitejs/plugin-react": "^4.7.0",
+    "@xyflow/react": "^12.3.5",
+    "chart.js": "^4.4.7",
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8",
+    "esbuild": "^0.24.0",
+    "isomorphic-git": "^1.27.1",
+    "jsdom": "^25.0.1",
+    "marked": "^12.0.2",
+    "monaco-editor": "^0.52.2",
+    "playwright": "^1.49.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.28.0",
+    "typescript": "^5.7.2",
+    "vite": "^5.4.11",
+    "vitest": "^2.1.8",
+    "zustand": "^4.5.5"
+  },
+  "contact": "manishkumars264@gmail.com",
+  "build": {
+    "appId": "com.apimanager.offline",
+    "productName": "API Manager",
+    "directories": {
+      "output": "release",
+      "buildResources": "build-resources"
+    },
+    "files": [
+      "dist/**",
+      "bin/**",
+      "node_modules/**",
+      "package.json",
+      "!**/*.map",
+      "!**/*.ts"
+    ],
+    "asar": true,
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development",
+      "artifactName": "${name}-${version}-${arch}.${ext}"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "${name}-${version}-setup-${arch}.${ext}"
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.developer-tools",
+      "artifactName": "${name}-${version}-${arch}.${ext}"
+    },
+    "npmRebuild": false
+  }
+}

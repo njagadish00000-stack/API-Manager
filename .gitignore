@@ -1,0 +1,8 @@
+node_modules/
+release/
+*.log
+.api-manager/
+.next/
+coverage/
+playwright-report/
+test-results/

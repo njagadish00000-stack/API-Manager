@@ -55,12 +55,15 @@ node bin/api-manager.mjs run "My Collection" --export-junit report.xml
 | Suite | Result |
 |---|---|
 | Unit tests (`npm run test:unit`, vitest) | ✅ **24/24 pass** — curl parsing (11), variable resolution (6), secret-scanner/HMAC/AES-GCM vault lifecycle (7) |
-| Hub end-to-end smoke (293-method `/api/call`) | ✅ every major subsystem verified against a live local echo server: workspace/collection/request/environment CRUD, `http.send` (200, timing), history, collection runs (+JUnit XML), mock server live hit + logs, monitor `runNow`→results, vault init/set/list/lock/unlock + wrong-password rejection, backup create+verify (sha256), global search, snapshots + compare, governance, workspace secret scan, `curl.parse`, codegen, audit log, DB diagnostics (`integrityOk`), dataset parse, webhook receiver (ephemeral port → real HTTP hit → save-as-request), perf run (2734 reqs, percentile metrics) + CSV export |
+| Hub end-to-end (`scripts/verify-full.mjs`, 161 checks) | ✅ **155 PASS · 6 documented-limitation partials · 0 FAIL** — every one of the 62 IPC domains exercised live: CRUD, http.send+envelope, history, runs (+JUnit), mocks (live hit), monitors, vault lifecycle + wrong-password rejection, backups sha256, search+replace dryRun, snapshots, governance, secret scans, codegen, curl, audit, DB diagnostics, datasets, webhooks (live hit on ephemeral port), perf (percentiles), OAuth2 (fake IdP: discover/clientCredentials/password/refresh), plugins (VM hook ran), MCP stdio (tools/resources/prompts round-trip), flows (run completes), git offline ops, inventory/settings/console/cookies/certs/proxies, WS/SSE/Socket.IO/MQTT/gRPC against dedicated local peers — **see CHECKLIST.md** |
 | Web UI serving | ✅ `/` 200, vendor JS 200, monaco CSS 200 |
 | CLI end-to-end | ✅ `send`, `import` (Postman), `run` (pass/fail, exit codes 0/1, cli/json/junit/html reporters), `export collection`, `collection list`, `curl --parse`, `lint`, `ports`, `perf` (URL + collection targets, percentile output), `backup --create/--list`, `mock --start/--list/--stop` (live HTTP hit), `scan` |
 | Electron desktop runtime | ⚠️ main/preload bundles build clean; not runtime-launched here (headless sandbox has no display server). Hub + bundled web UI is the verified runtime. |
 
-## Feature Status (A–AE checklist)
+## Feature Status (A–AE)
+Full evidence-backed per-feature checklist with the 161-check result breakdown: **[CHECKLIST.md](CHECKLIST.md)**.
+
+### A–AE checklist (summary)
 Legend: `[x]` verified working · `[~]` implemented, partially verified / needs real credentials or a desktop session · `[ ]` not done
 
 - [x] **A — Shell & offline wrapper**: Electron main/preload built, single-process hub, zero network dependencies (desktop runtime itself untested in this headless sandbox [~ caveat])
@@ -110,6 +113,8 @@ Legend: `[x]` verified working · `[~]` implemented, partially verified / needs 
 2. **WebSocket/SSE/MQTT/gRPC/Socket.IO** transports are implemented but were not swung end-to-end against live brokers in this validation run (HTTP/1.1 was). gRPC requires `@grpc/grpc-js` at runtime; in CJS-bundled builds install it next to the bundle or run from the repo.
 3. A wrong vault password surfaces as a low-level GCM message (`"Unsupported state or unable to authenticate data"`). This is the honest AES-GCM authentication failure — by design no plaintext metadata leaks when the password is wrong.
 4. After a hub restart, persisted `running: true` states (mocks/webhooks/monitors) are stale — stop then start them once to rebind sockets (the UI shows them as running until you do).
+5. `spec.syncApply` intentionally refuses to auto-mutate collections (use `spec.syncReport` + `spec.generateCollection`). `git.stash` uses the isomorphic-git stash API (tracked files, loose objects) and needs repo author config; the error states this and the temp-branch alternative. AI assistant calls (`ai.send`) need a provider key (`ai.providers` ships OpenAI-compatible presets). Git push/pull/clone need a reachable remote — none of these were exercised offline.
+6. WebSocket/SSE/MQTT/gRPC/Socket.IO were verified against **dedicated local protocol peers** included in `scripts/verify-peers.cjs` (WS echo, SSE source, minimal MQTT broker, minimal Socket.IO server, real gRPC server, fake OIDC IdP) — the transports are real, not simulated.
 5. Electron packaging artifacts were not produced in this sandbox (electron binary download disabled); the builder config is provided and the directory packaging step should be run on a developer machine.
 6. Big-N scrypt unlocks (vault) take ~1s by design (memory-hard KDF, 128 MB window per vault key derivation).
 

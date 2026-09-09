@@ -199,12 +199,13 @@ export class Repos {
     }));
   }
   saveExample(e: RequestExample): RequestExample {
-    const { id, requestId, name, ...rest } = e;
+    const id = e.id ?? uid(); // examples may arrive without an id (import/preview flows)
+    const { requestId, name, ...rest } = e;
     const doc = j({ ...rest });
     const existing = this.byId<Row>('examples', id);
     const row: Row = { id, request_id: requestId, name, doc, created_at: existing ? String(existing.created_at) : e.createdAt ?? now(), updated_at: now() };
     if (existing) this.updateRow('examples', id, row); else this.insert('examples', row);
-    return { ...e, updatedAt: now() };
+    return { ...e, id, updatedAt: now() };
   }
   deleteExample(id: string): void { this.deleteById('examples', id); }
   getExample(id: string): RequestExample | undefined {
@@ -579,6 +580,7 @@ export class Repos {
     return this.db.all<Row>('SELECT * FROM certificates WHERE workspace_id = ? ORDER BY name', [workspaceId]).map((r) => ({ ...parseDoc<Certificate>(r), id: String(r.id), workspaceId: String(r.workspace_id), name: String(r.name), createdAt: String(r.created_at) }));
   }
   saveCertificate(c: Certificate): Certificate {
+    if (!c.id) c = { ...c, id: uid() };
     const existing = this.byId<Row>('certificates', c.id);
     const { id, workspaceId, name, ...rest } = c;
     const row: Row = { id, workspace_id: workspaceId, name, doc: j(rest), created_at: existing ? String(existing.created_at) : c.createdAt ?? now() };
@@ -594,6 +596,7 @@ export class Repos {
     return rows.map((r) => ({ ...parseDoc<ProxyProfile>(r), id: String(r.id), workspaceId: r.workspace_id ? String(r.workspace_id) : undefined, name: String(r.name), createdAt: String(r.created_at) }));
   }
   saveProxy(p: ProxyProfile): ProxyProfile {
+    if (!p.id) p = { ...p, id: uid() };
     const existing = this.byId<Row>('proxies', p.id);
     const { id, workspaceId, name, ...rest } = p;
     const row: Row = { id, workspace_id: workspaceId ?? null, name, doc: j(rest), created_at: existing ? String(existing.created_at) : p.createdAt ?? now() };
@@ -659,8 +662,9 @@ export class Repos {
     return this.db.all<Row>('SELECT * FROM tags WHERE workspace_id = ? ORDER BY name', [workspaceId]).map((r) => ({ id: String(r.id), workspaceId: String(r.workspace_id), name: String(r.name), color: r.color ? String(r.color) : undefined }));
   }
   saveTag(t: Tag): Tag {
-    this.db.run('INSERT INTO tags (id, workspace_id, name, color) VALUES (?, ?, ?, ?) ON CONFLICT(workspace_id, name) DO UPDATE SET color = excluded.color', [t.id, t.workspaceId, t.name, t.color ?? null]);
-    return t;
+    const tag = t.id ? t : { ...t, id: uid() };
+    this.db.run('INSERT INTO tags (id, workspace_id, name, color) VALUES (?, ?, ?, ?) ON CONFLICT(workspace_id, name) DO UPDATE SET color = excluded.color', [tag.id, tag.workspaceId, tag.name, tag.color ?? null]);
+    return tag;
   }
   deleteTag(id: string): void { this.deleteById('tags', id); }
 

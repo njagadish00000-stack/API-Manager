@@ -132,16 +132,22 @@ export async function gitPush(dir: string, remote?: string, auth?: { username?: 
 }
 
 export async function gitStash(dir: string, message?: string): Promise<void> {
+  // isomorphic-git stash API: tracked files only, loose objects (see gitService header docs)
   try {
     await git.stash({ fs, dir: repo(dir), op: 'push', message: message ?? 'api-manager stash' });
-  } catch {
-    // fallback manual stash: commit to a temporary ref
-    throw new Error('Stash not supported by this repo state; commit or checkout files first');
+  } catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    throw new Error(`git.stash failed: ${why} — note: isomorphic-git stashes tracked files with loose objects only; if the repo uses packed objects, commit or checkout first, or commit onto a temporary "stash/<label>" branch and return with git.checkout`);
   }
 }
 
 export async function gitStashPop(dir: string): Promise<void> {
-  await git.stash({ fs, dir: repo(dir), op: 'pop' });
+  try {
+    await git.stash({ fs, dir: repo(dir), op: 'pop' });
+  } catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    throw new Error(`git.stashPop failed: ${why} (nothing stashed, or packed-object repo)`);
+  }
 }
 
 export async function gitLog(dir: string, limit = 50): Promise<GitLogEntry[]> {

@@ -200,9 +200,13 @@ export async function socketIoConnect(args: { url: string; headers?: Record<stri
   socket.on('disconnect', (reason) => emit('ws.message', { sessionId, direction: 'sys', data: `disconnected: ${reason}`, binary: false, ts: now() } satisfies WsMessageEvent));
   socket.on('connect_error', (err) => emit('ws.message', { sessionId, direction: 'sys', data: `connect_error: ${err.message}`, binary: false, ts: now() } satisfies WsMessageEvent));
   await new Promise<void>((resolve, reject) => {
-    socket.once('connect', () => resolve());
-    socket.once('connect_error', reject);
-    setTimeout(() => reject(new Error('socket.io connect timeout')), 15000);
+    let settled = false;
+    const okResolve = () => { if (!settled) { settled = true; resolve(); } };
+    const badify = (err: Error) => { if (!settled) { settled = true; reject(err); } };
+    socket.once('connect', okResolve);
+    socket.once('connect_error', badify);
+    socket.once('disconnect', (reason) => badify(new Error(`socket.io closed before connect: ${reason}`)));
+    setTimeout(() => badify(new Error('socket.io connect timeout')), 15000);
   });
   return { sessionId };
 }

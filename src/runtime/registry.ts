@@ -1204,8 +1204,9 @@ export function createRegistry(container: AppContainer): Registry {
     },
     'flow.save': async (p) => {
       const flow = (p as { flow: import('../shared/types').Flow }).flow;
-      const saved = repos.saveFlow(flow);
-      audit('flow.save', flow.name, 'project');
+      const withIds = { ...flow, id: flow.id ?? uid(), workspaceId: ensureWorkspace(flow.workspaceId), version: flow.version ?? 1 };
+      const saved = repos.saveFlow(withIds);
+      audit('flow.save', saved?.name ?? withIds.name, 'project');
       return saved;
     },
     'flow.delete': async (p) => { repos.deleteFlow((p as { id: string }).id); },
@@ -1437,7 +1438,11 @@ export function createRegistry(container: AppContainer): Registry {
 
     // --- certificates / proxies --------------------------------------------------------
     'certificate.list': async (p) => repos.listCertificates(ensureWorkspace((p as { workspaceId?: string }).workspaceId)),
-    'certificate.save': async (p) => repos.saveCertificate((p as { certificate: Parameters<Repos['saveCertificate']>[0] }).certificate),
+    'certificate.save': async (p) => {
+      const args = p as { certificate: Parameters<Repos['saveCertificate']>[0]; workspaceId?: string };
+      const cert = { ...args.certificate, workspaceId: ensureWorkspace(args.certificate?.workspaceId ?? args.workspaceId) };
+      return repos.saveCertificate(cert);
+    },
     'certificate.delete': async (p) => { repos.deleteCertificate((p as { id: string }).id); },
     'certificate.inspect': async (p) => {
       const args = p as { id: string };
@@ -1808,7 +1813,11 @@ export function createRegistry(container: AppContainer): Registry {
       return repos.toggleFavorite(ensureWorkspace(args.workspaceId), args.entityType, args.entityId);
     },
     'tag.list': async (p) => repos.listTags(ensureWorkspace((p as { workspaceId?: string }).workspaceId)),
-    'tag.save': async (p) => repos.saveTag((p as { tag: Parameters<Repos['saveTag']>[0] }).tag),
+    'tag.save': async (p) => {
+      const args = p as { tag: Parameters<Repos['saveTag']>[0]; workspaceId?: string };
+      const tag = { ...args.tag, workspaceId: ensureWorkspace(args.tag?.workspaceId ?? args.workspaceId) };
+      return repos.saveTag(tag);
+    },
     'tag.delete': async (p) => { repos.deleteTag((p as { id: string }).id); },
 
     // --- protocols ----------------------------------------------------------------------

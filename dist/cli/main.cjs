@@ -4118,13 +4118,14 @@ var init_repositories = __esm({
         }));
       }
       saveExample(e) {
-        const { id, requestId, name: name2, ...rest } = e;
+        const id = e.id ?? uid();
+        const { requestId, name: name2, ...rest } = e;
         const doc = j({ ...rest });
         const existing = this.byId("examples", id);
         const row = { id, request_id: requestId, name: name2, doc, created_at: existing ? String(existing.created_at) : e.createdAt ?? now(), updated_at: now() };
         if (existing) this.updateRow("examples", id, row);
         else this.insert("examples", row);
-        return { ...e, updatedAt: now() };
+        return { ...e, id, updatedAt: now() };
       }
       deleteExample(id) {
         this.deleteById("examples", id);
@@ -4577,6 +4578,7 @@ var init_repositories = __esm({
         return this.db.all("SELECT * FROM certificates WHERE workspace_id = ? ORDER BY name", [workspaceId]).map((r) => ({ ...parseDoc(r), id: String(r.id), workspaceId: String(r.workspace_id), name: String(r.name), createdAt: String(r.created_at) }));
       }
       saveCertificate(c) {
+        if (!c.id) c = { ...c, id: uid() };
         const existing = this.byId("certificates", c.id);
         const { id, workspaceId, name: name2, ...rest } = c;
         const row = { id, workspace_id: workspaceId, name: name2, doc: j(rest), created_at: existing ? String(existing.created_at) : c.createdAt ?? now() };
@@ -4592,6 +4594,7 @@ var init_repositories = __esm({
         return rows.map((r) => ({ ...parseDoc(r), id: String(r.id), workspaceId: r.workspace_id ? String(r.workspace_id) : void 0, name: String(r.name), createdAt: String(r.created_at) }));
       }
       saveProxy(p) {
+        if (!p.id) p = { ...p, id: uid() };
         const existing = this.byId("proxies", p.id);
         const { id, workspaceId, name: name2, ...rest } = p;
         const row = { id, workspace_id: workspaceId ?? null, name: name2, doc: j(rest), created_at: existing ? String(existing.created_at) : p.createdAt ?? now() };
@@ -4664,8 +4667,9 @@ var init_repositories = __esm({
         return this.db.all("SELECT * FROM tags WHERE workspace_id = ? ORDER BY name", [workspaceId]).map((r) => ({ id: String(r.id), workspaceId: String(r.workspace_id), name: String(r.name), color: r.color ? String(r.color) : void 0 }));
       }
       saveTag(t) {
-        this.db.run("INSERT INTO tags (id, workspace_id, name, color) VALUES (?, ?, ?, ?) ON CONFLICT(workspace_id, name) DO UPDATE SET color = excluded.color", [t.id, t.workspaceId, t.name, t.color ?? null]);
-        return t;
+        const tag = t.id ? t : { ...t, id: uid() };
+        this.db.run("INSERT INTO tags (id, workspace_id, name, color) VALUES (?, ?, ?, ?) ON CONFLICT(workspace_id, name) DO UPDATE SET color = excluded.color", [tag.id, tag.workspaceId, tag.name, tag.color ?? null]);
+        return tag;
       }
       deleteTag(id) {
         this.deleteById("tags", id);
@@ -68616,9 +68620,23 @@ async function socketIoConnect(args, emit2) {
   socket.on("disconnect", (reason) => emit2("ws.message", { sessionId, direction: "sys", data: `disconnected: ${reason}`, binary: false, ts: now() }));
   socket.on("connect_error", (err) => emit2("ws.message", { sessionId, direction: "sys", data: `connect_error: ${err.message}`, binary: false, ts: now() }));
   await new Promise((resolve3, reject) => {
-    socket.once("connect", () => resolve3());
-    socket.once("connect_error", reject);
-    setTimeout(() => reject(new Error("socket.io connect timeout")), 15e3);
+    let settled = false;
+    const okResolve = () => {
+      if (!settled) {
+        settled = true;
+        resolve3();
+      }
+    };
+    const badify = (err) => {
+      if (!settled) {
+        settled = true;
+        reject(err);
+      }
+    };
+    socket.once("connect", okResolve);
+    socket.once("connect_error", badify);
+    socket.once("disconnect", (reason) => badify(new Error(`socket.io closed before connect: ${reason}`)));
+    setTimeout(() => badify(new Error("socket.io connect timeout")), 15e3);
   });
   return { sessionId };
 }
@@ -125759,12 +125777,18 @@ async function gitPush(dir, remote, auth) {
 async function gitStash(dir, message) {
   try {
     await import_isomorphic_git.default.stash({ fs: import_node_fs7.default, dir: repo(dir), op: "push", message: message ?? "api-manager stash" });
-  } catch {
-    throw new Error("Stash not supported by this repo state; commit or checkout files first");
+  } catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    throw new Error(`git.stash failed: ${why} \u2014 note: isomorphic-git stashes tracked files with loose objects only; if the repo uses packed objects, commit or checkout first, or commit onto a temporary "stash/<label>" branch and return with git.checkout`);
   }
 }
 async function gitStashPop(dir) {
-  await import_isomorphic_git.default.stash({ fs: import_node_fs7.default, dir: repo(dir), op: "pop" });
+  try {
+    await import_isomorphic_git.default.stash({ fs: import_node_fs7.default, dir: repo(dir), op: "pop" });
+  } catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    throw new Error(`git.stashPop failed: ${why} (nothing stashed, or packed-object repo)`);
+  }
 }
 async function gitLog(dir, limit = 50) {
   const commits = await import_isomorphic_git.default.log({ fs: import_node_fs7.default, dir: repo(dir), depth: limit });
@@ -144113,8 +144137,9 @@ function createRegistry(container) {
     },
     "flow.save": async (p) => {
       const flow = p.flow;
-      const saved = repos.saveFlow(flow);
-      audit("flow.save", flow.name, "project");
+      const withIds = { ...flow, id: flow.id ?? uid(), workspaceId: ensureWorkspace(flow.workspaceId), version: flow.version ?? 1 };
+      const saved = repos.saveFlow(withIds);
+      audit("flow.save", saved?.name ?? withIds.name, "project");
       return saved;
     },
     "flow.delete": async (p) => {
@@ -144372,7 +144397,11 @@ function createRegistry(container) {
     },
     // --- certificates / proxies --------------------------------------------------------
     "certificate.list": async (p) => repos.listCertificates(ensureWorkspace(p.workspaceId)),
-    "certificate.save": async (p) => repos.saveCertificate(p.certificate),
+    "certificate.save": async (p) => {
+      const args = p;
+      const cert = { ...args.certificate, workspaceId: ensureWorkspace(args.certificate?.workspaceId ?? args.workspaceId) };
+      return repos.saveCertificate(cert);
+    },
     "certificate.delete": async (p) => {
       repos.deleteCertificate(p.id);
     },
@@ -144790,7 +144819,11 @@ function createRegistry(container) {
       return repos.toggleFavorite(ensureWorkspace(args.workspaceId), args.entityType, args.entityId);
     },
     "tag.list": async (p) => repos.listTags(ensureWorkspace(p.workspaceId)),
-    "tag.save": async (p) => repos.saveTag(p.tag),
+    "tag.save": async (p) => {
+      const args = p;
+      const tag = { ...args.tag, workspaceId: ensureWorkspace(args.tag?.workspaceId ?? args.workspaceId) };
+      return repos.saveTag(tag);
+    },
     "tag.delete": async (p) => {
       repos.deleteTag(p.id);
     },

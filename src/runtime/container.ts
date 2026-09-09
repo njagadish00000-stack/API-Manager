@@ -205,6 +205,29 @@ export async function createContainer(config: ContainerConfig): Promise<AppConta
         repos.saveResponse(wsId, clone);
       },
       audit: (action: string, detail?: string, category?: string) => container.audit(action, detail, category, workspaceId),
+      applyVariableChanges: (changes) => {
+        const applyVars = (existing: Variable[], delta: Record<string, string | undefined>): Variable[] => {
+          const next = [...existing];
+          for (const [k, v] of Object.entries(delta)) {
+            const idx = next.findIndex((x) => x.key === k);
+            if (v === undefined) { if (idx >= 0) next.splice(idx, 1); continue; }
+            if (idx >= 0) next[idx] = { ...next[idx], value: v };
+            else next.push({ id: uid(), key: k, value: v, type: 'default', enabled: true });
+          }
+          return next;
+        };
+        let touched = false;
+        if (changes.environment) {
+          const env = repos.getEnvironment(changes.environment.id);
+          if (env) { repos.saveEnvironment({ ...env, variables: applyVars(env.variables, changes.environment.vars), updatedAt: now() }); touched = true; }
+        }
+        if (changes.globals) { container.setGlobalVars(applyVars(container.getGlobalVars(), changes.globals)); touched = true; }
+        if (changes.collection) {
+          const coll = repos.getCollection(changes.collection.id);
+          if (coll) { repos.saveCollection({ ...coll, variables: applyVars(coll.variables ?? [], changes.collection.vars), updatedAt: now() }); touched = true; }
+        }
+        if (touched) container.audit('variables.mutate', 'script-driven scope changes persisted', 'variables', workspaceId);
+      },
       maxBodyBytes: Math.max(1024 * 1024, settings.data.maxResponseBodyBytes),
       dataRow: undefined,
     };

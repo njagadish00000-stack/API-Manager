@@ -191,3 +191,7 @@ kbd.shortcut-row { background: none; border: none; }
 .section-title { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: var(--fg2); margin: 16px 0 8px; }
 .resizable-cols { display: flex; height: 100%; min-height: 0; }
 .resizable-cols > .col-l { border-right: 1px solid var(--border); overflow: auto; }
+
+/* response-body search hits (§response search) */
+mark.resp-hit { background: rgba(250, 204, 21, .42); color: inherit; border-radius: 2px; padding: 0 1px; }
+mark.resp-hit.active { background: rgba(249, 115, 22, .85); color: #0b0d10; outline: 1px solid rgba(249, 115, 22, .95); }

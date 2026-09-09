@@ -39,10 +39,18 @@ states why + local alternative) · ⬜ not implemented.
 - 🟡 Auth schemes: none/basic exercised end-to-end; bearer/digest/apikey/jwt/oauth1/oauth2-PKCE/AWS4/hawk/ntlm implemented (engine code), not each swung against a live server this run
 
 ## J — Scripts
-- ✅ `pm.*` pre-request/test sandbox; pass/fail counted in collection runs (verified 1✓/1✗ in failing-run exit-code test)
+- ✅ `pm.*` pre-request/test sandbox; pass/fail counted in collection runs
+- ✅ Variable scopes: local (`pm.variables`, highest precedence) → active environment → globals (`pm.globals`) → collection (`pm.collectionVariables`); resolver chain dynamic/global/workspace/environment/collection/folder/request/data/local/script
+- ✅ Pre-request local vars feed URL/header resolution (verified live: `pm.variables.set('TAIL',...)` used in `{{TAIL}}` URL)
+- ✅ `pm.environment.set`/`pm.globals.set` persistence verified live end-to-end (env POST_TAG=200, global G_POST_FLAG written by post-response script) (verified 1✓/1✗ in failing-run exit-code test)
 
 ## K — Response viewer & L — history/context
 - ✅ `http.send` envelope (opId, response{status,headers,bodyText,timing,redirects,cookies}, assertionResults, consoleLogs, resolvedUrl)
+- ✅ Response viewer UI: pre-request/post-response script editors (Scripts tab) wired to engine; zoom out/in (0.5–2.5×), word-wrap toggle (existing)
+- ✅ Response body **search**: highlight (`<mark id="resp-hit-N">`), n/total counter, ↑/↓ Enter/Shift+Enter nav, active-hit scroll (NEW)
+- ✅ **Copy ▾ / Save ▾**: body, body as JSON (pretty-printed), or full response JSON incl. status/headers/cookies/timing/redirects — `saveBlob()` offline download (NEW)
+- ✅ Script scope persistence FIXED: `pm.environment.set`/`pm.globals.set`/`pm.collectionVariables.set` now write through `deps.applyVariableChanges` into repos (regression unit test: `sendPipeline persists script variable mutations`)
+- ✅ `pm.expect` Postman/Jest-style matchers ADDED: `toBe/toEqual/toContain/toMatch/toThrow/toBeNull/toBeUndefined/toBeTruthy/toBeFalsy/toContainEqual/toBeGreaterThan(OrEqual)/toBeLessThan(OrEqual)/toBeCloseTo/toHaveLength/toHaveProperty/toBeInstanceOf/toMatchObject` (pending notes: chai-style chains `.to.be.above()` still supported; `pm.response.code` = number, `pm.response.status` = text (Postman parity))
 - ✅ `http.recentResponses` (+ per-request), `http.responseById`
 - ✅ `response.compare` (JSON body diff + header diff) — verified with two real saved responses (fixed this cycle: correct `{a,b}` shape documented)
 - ✅ `example.save/list/duplicate/delete`

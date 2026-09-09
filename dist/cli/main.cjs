@@ -8104,6 +8104,41 @@ async function createContainer(config) {
         repos.saveResponse(wsId, clone);
       },
       audit: (action, detail, category) => container.audit(action, detail, category, workspaceId),
+      applyVariableChanges: (changes) => {
+        const applyVars = (existing, delta) => {
+          const next = [...existing];
+          for (const [k, v] of Object.entries(delta)) {
+            const idx = next.findIndex((x) => x.key === k);
+            if (v === void 0) {
+              if (idx >= 0) next.splice(idx, 1);
+              continue;
+            }
+            if (idx >= 0) next[idx] = { ...next[idx], value: v };
+            else next.push({ id: uid(), key: k, value: v, type: "default", enabled: true });
+          }
+          return next;
+        };
+        let touched = false;
+        if (changes.environment) {
+          const env = repos.getEnvironment(changes.environment.id);
+          if (env) {
+            repos.saveEnvironment({ ...env, variables: applyVars(env.variables, changes.environment.vars), updatedAt: now() });
+            touched = true;
+          }
+        }
+        if (changes.globals) {
+          container.setGlobalVars(applyVars(container.getGlobalVars(), changes.globals));
+          touched = true;
+        }
+        if (changes.collection) {
+          const coll = repos.getCollection(changes.collection.id);
+          if (coll) {
+            repos.saveCollection({ ...coll, variables: applyVars(coll.variables ?? [], changes.collection.vars), updatedAt: now() });
+            touched = true;
+          }
+        }
+        if (touched) container.audit("variables.mutate", "script-driven scope changes persisted", "variables", workspaceId);
+      },
       maxBodyBytes: Math.max(1024 * 1024, settings.data.maxResponseBodyBytes),
       dataRow: void 0
     };
@@ -52872,6 +52907,104 @@ var init_pmApi = __esm({
       body(_expected) {
         return this;
       }
+      // ---- Jest/Postman-style aliases (pm.expect(...).toBe(...) etc.) ----
+      toBe(expected) {
+        this.assert(this.actual === expected, `to be ${fmt(expected)}`);
+        return this;
+      }
+      toEqual(expected) {
+        this.assert(deepEqual(this.actual, expected), `to equal ${fmt(expected)}`);
+        return this;
+      }
+      toStrictEqual(expected) {
+        return this.toEqual(expected);
+      }
+      toBeNull() {
+        this.assert(this.actual === null, `to be null`);
+        return this;
+      }
+      toBeUndefined() {
+        this.assert(this.actual === void 0, `to be undefined`);
+        return this;
+      }
+      toBeDefined() {
+        this.assert(this.actual !== void 0, `to be defined`);
+        return this;
+      }
+      toBeTruthy() {
+        this.assert(!!this.actual, `to be truthy`);
+        return this;
+      }
+      toBeFalsy() {
+        this.assert(!this.actual, `to be falsy`);
+        return this;
+      }
+      toBeNaN() {
+        this.assert(Number.isNaN(this.actual), `to be NaN`);
+        return this;
+      }
+      toContain(item) {
+        return this.include(item);
+      }
+      toContainEqual(item) {
+        const v = this.actual;
+        this.assert(Array.isArray(v) && v.some((x) => deepEqual(x, item)), `to contain ${fmt(item)}`);
+        return this;
+      }
+      toMatch(reOrStr) {
+        const re2 = reOrStr instanceof RegExp ? reOrStr : new RegExp(String(reOrStr).replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"));
+        this.assert(re2.test(String(this.actual)), `to match ${re2}`);
+        return this;
+      }
+      toThrow(errOrMsg) {
+        if (typeof this.actual !== "function") throw new Error("pm.expect(...).toThrow requires a function as actual");
+        let thrown;
+        try {
+          this.actual();
+        } catch (e) {
+          thrown = e;
+        }
+        this.assert(thrown !== void 0, `to throw an error`);
+        if (thrown !== void 0 && errOrMsg !== void 0) {
+          const msg = thrown instanceof Error ? thrown.message : String(thrown);
+          const ok = typeof errOrMsg === "string" ? msg.includes(errOrMsg) : errOrMsg instanceof RegExp ? errOrMsg.test(msg) : thrown instanceof errOrMsg;
+          this.assert(ok, `to throw matching ${String(errOrMsg)} (got "${msg}")`);
+        }
+        return this;
+      }
+      toBeInstanceOf(ctor) {
+        this.assert(this.actual instanceof ctor, `to be instance of ${ctor.name}`);
+        return this;
+      }
+      toHaveProperty(name2, value2) {
+        if (arguments.length > 1) return this.property(name2, value2);
+        return this.property(name2);
+      }
+      toHaveLength(n) {
+        return this.lengthOf(n);
+      }
+      toBeGreaterThan(n) {
+        return this.above(n);
+      }
+      toBeGreaterThanOrEqual(n) {
+        return this.least(n);
+      }
+      toBeLessThan(n) {
+        return this.below(n);
+      }
+      toBeLessThanOrEqual(n) {
+        return this.most(n);
+      }
+      toBeCloseTo(n, precision = 2) {
+        this.assert(Math.abs(Number(this.actual) - n) < 0.5 * 10 ** -precision, `to be close to ${n} (\xB1${precision} digits)`);
+        return this;
+      }
+      toMatchObject(fragment) {
+        const v = this.actual;
+        const ok = !!v && typeof v === "object" && Object.entries(fragment).every(([k, val]) => deepEqual(v[k], val));
+        this.assert(ok, `to match object ${fmt(fragment)}`);
+        return this;
+      }
     };
     HeaderList = class {
       constructor(headers) {
@@ -61865,6 +61998,20 @@ async function executeRequest(opts, deps) {
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
     deps.onConsole("error", "send", `Request failed: ${error}`);
+  }
+  try {
+    const hasEnv = !!env && Object.keys(envChanges).length > 0;
+    const hasGlobal = Object.keys(globalChanges).length > 0;
+    const hasColl = !!collection && Object.keys(collectionChanges).length > 0;
+    if ((hasEnv || hasGlobal || hasColl) && deps.applyVariableChanges) {
+      deps.applyVariableChanges({
+        environment: hasEnv ? { id: env.id, name: env.name, vars: envChanges } : void 0,
+        globals: hasGlobal ? globalChanges : void 0,
+        collection: hasColl ? { id: collection.id, name: collection.name, vars: collectionChanges } : void 0
+      });
+    }
+  } catch (e) {
+    deps.onConsole("warn", "send", `Failed to persist variable changes: ${e instanceof Error ? e.message : e}`);
   }
   try {
     deps.persistHistory({ request: request8, response, error });

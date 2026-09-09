@@ -12,8 +12,8 @@ same 293-method local IPC bridge, so everything is equally scriptable.
 
 ## Features
 - Collections, folders, requests with full HTTP engine (auth schemes, cookies, retry, redirects, timing breakdown)
-- Environments & variables (scoped resolution, `.env` import/export), globals, cookie jar
-- Response viewer: JSON tree, word-wrap, zoom, headers/timeline/console/test panels, save/compare responses
+- Environments & variables (scoped resolution, `.env` import/export), globals, cookie jar; script mutations (`pm.environment.set`/`pm.globals.set`/`pm.collectionVariables.set`) persist like Postman
+- Response viewer: JSON tree, word-wrap, zoom (0.5–2.5×), in-body search w/ match nav, headers/timeline/console/test panels, save/compare, copy/save body-or-full-response JSON
 - Import/export: Postman, Insomnia, OpenAPI, WSDL/SOAPUI, curl, HAR, `.http`, `.env`
 - Protocols: WebSocket, SSE, MQTT, gRPC (reflection/protos), Socket.IO console
 - Scripting: `pm.*` API pre-request/test scripts (sandboxed VM), script library snippets
@@ -76,7 +76,7 @@ Legend: `[x]` verified working · `[~]` implemented, partially verified / needs 
 - [x] **H — Authorization workspace**: none/inherit/basic/bearer/digest/API-key/JWT/OAuth1/OAuth2-PKCE/AWS-SigV4/NTLM implemented; end-to-end exercised for none/basic in smoke runs `[~ on exotic schemes]`
 - [x] **I — Header builder**: presets, content-negotiation helpers
 - [x] **J — Scripts**: `pm.*` pre-request/test sandbox; `pm.test`/`pm.expect` verified (pass/fail counted in runs)
-- [x] **K — Response viewer**: pretty JSON, headers, timing breakdown, cookies, save/compare
+- [x] **K — Response viewer**: pretty JSON tree, headers, timing breakdown, cookies, save/compare, **search (Enter/Shift+Enter nav)**, **copy/save body or full response as JSON**, word-wrap toggle, zoom icons
 - [x] **L — Context/history**: request history, console log, re-send, save response as example
 - [x] **M — Variables & scoping**: global/environment/collection/local scopes + dynamic vars (unit-tested)
 - [x] **N — Environment app**: create/edit/enable, `.env` import/export

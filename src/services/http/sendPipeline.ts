@@ -49,6 +49,12 @@ export interface PipelineDeps {
   persistHistory: (entry: { request: ApiRequest; response?: ApiResponse; error?: string }) => void;
   persistResponse: (workspaceId: string, response: ApiResponse) => void;
   audit: (action: string, detail?: string, category?: string) => void;
+  /** Persist script-driven scope mutations (pm.environment.set / pm.globals.set / pm.collectionVariables.set). Optional: flowRunner re-implements. */
+  applyVariableChanges?: (changes: {
+    environment?: { id: string; name: string; vars: Record<string, string | undefined> };
+    globals?: Record<string, string | undefined>;
+    collection?: { id: string; name: string; vars: Record<string, string | undefined> };
+  }) => void;
   maxBodyBytes: number;
   dataRow?: Record<string, string>;
 }
@@ -257,6 +263,22 @@ export async function executeRequest(opts: SendOptions, deps: PipelineDeps): Pro
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
     deps.onConsole('error', 'send', `Request failed: ${error}`);
+  }
+
+  // Persist script-driven scope mutations (Postman parity: pm.environment.set / pm.globals.set / pm.collectionVariables.set persist after the request)
+  try {
+    const hasEnv = !!env && Object.keys(envChanges).length > 0;
+    const hasGlobal = Object.keys(globalChanges).length > 0;
+    const hasColl = !!collection && Object.keys(collectionChanges).length > 0;
+    if ((hasEnv || hasGlobal || hasColl) && deps.applyVariableChanges) {
+      deps.applyVariableChanges({
+        environment: hasEnv ? { id: env!.id, name: env!.name, vars: envChanges } : undefined,
+        globals: hasGlobal ? globalChanges : undefined,
+        collection: hasColl ? { id: collection!.id, name: collection!.name, vars: collectionChanges } : undefined,
+      });
+    }
+  } catch (e) {
+    deps.onConsole('warn', 'send', `Failed to persist variable changes: ${e instanceof Error ? e.message : e}`);
   }
 
   // persist history + response

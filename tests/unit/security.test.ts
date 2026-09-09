@@ -85,3 +85,42 @@ describe('vault (AES-256-GCM, scrypt KDF)', () => {
     expect(raw).not.toContain('PLAINTEXT-SENTINEL-9b');
   });
 });
+
+describe('response viewer export/search helpers', () => {
+  it('literal regex escaping keeps search safe', async () => {
+    const { countMatches, markSearch } = await import('../../src/renderer/responseExport');
+    expect(countMatches('xa.Ay q a.A', 'a.A')).toBe(2); // '.' is literal, not regex wild
+    expect(countMatches('x{2}x{2}', '{2}')).toBe(2);
+    const marked = markSearch('token: abc, token: DEF', 'token');
+    expect(marked).toContain('id="resp-hit-0"');
+    expect(marked.match(/<mark /g)?.length).toBe(2);
+    expect(markSearch('safe body', 'zzz')).toBe('safe body');
+  });
+
+  it('fullResponseJson includes status, headers, cookies, timing and body', async () => {
+    const { fullResponseJson } = await import('../../src/renderer/responseExport');
+    const json = fullResponseJson({
+      status: 200, statusText: 'OK', httpVersion: 'HTTP/1.1',
+      headers: [{ key: 'content-type', value: 'application/json', enabled: true }],
+      cookies: [{ name: 's', value: '1', domain: 'x.test' }],
+      timing: { totalMs: 42 }, redirects: [], bodyText: '{"ok":true}', bodySize: 11,
+    });
+    const parsed = JSON.parse(json);
+    expect(parsed.status).toBe(200);
+    expect(parsed.headers[0].key).toBe('content-type');
+    expect(parsed.bodyText).toContain('ok');
+    expect(parsed.timing.totalMs).toBe(42);
+    expect(Object.keys(parsed)).toContain('headers');
+  });
+
+  it('bodyExport pretty-prints JSON and picks json name/mime', async () => {
+    const { bodyExport } = await import('../../src/renderer/responseExport');
+    const e = bodyExport({ status: 200, headers: [{ key: 'Content-Type', value: 'application/json' }], bodyText: '{"a":1}' });
+    expect(e.name).toMatch(/response-.*-200\.json$/);
+    expect(e.mime).toBe('application/json');
+    expect(JSON.parse(e.content)).toEqual({ a: 1 });
+    const e2 = bodyExport({ status: 404, headers: [], bodyText: 'not here' });
+    expect(e2.mime).toBe('text/plain');
+    expect(e2.name).toMatch(/\.txt$/);
+  });
+});

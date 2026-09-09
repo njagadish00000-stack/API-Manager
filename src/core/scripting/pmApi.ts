@@ -146,6 +146,61 @@ class ExpectChain {
   header(_name: string): this { return this; }
   jsonBody(_path?: string): this { return this; }
   body(_expected?: string): this { return this; }
+
+  // ---- Jest/Postman-style aliases (pm.expect(...).toBe(...) etc.) ----
+  toBe(expected: unknown): this { this.assert(this.actual === expected, `to be ${fmt(expected)}`); return this; }
+  toEqual(expected: unknown): this { this.assert(deepEqual(this.actual, expected), `to equal ${fmt(expected)}`); return this; }
+  toStrictEqual(expected: unknown): this { return this.toEqual(expected); }
+  toBeNull(): this { this.assert(this.actual === null, `to be null`); return this; }
+  toBeUndefined(): this { this.assert(this.actual === undefined, `to be undefined`); return this; }
+  toBeDefined(): this { this.assert(this.actual !== undefined, `to be defined`); return this; }
+  toBeTruthy(): this { this.assert(!!this.actual, `to be truthy`); return this; }
+  toBeFalsy(): this { this.assert(!this.actual, `to be falsy`); return this; }
+  toBeNaN(): this { this.assert(Number.isNaN(this.actual), `to be NaN`); return this; }
+  toContain(item: unknown): this { return this.include(item); }
+  toContainEqual(item: unknown): this {
+    const v = this.actual;
+    this.assert(Array.isArray(v) && v.some((x) => deepEqual(x, item)), `to contain ${fmt(item)}`);
+    return this;
+  }
+  toMatch(reOrStr: RegExp | string): this {
+    const re = reOrStr instanceof RegExp ? reOrStr : new RegExp(String(reOrStr).replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+    this.assert(re.test(String(this.actual)), `to match ${re}`); return this;
+  }
+  toThrow(errOrMsg?: RegExp | string | (new (...a: unknown[]) => Error)): this {
+    if (typeof this.actual !== 'function') throw new Error('pm.expect(...).toThrow requires a function as actual');
+    let thrown: unknown;
+    try { (this.actual as () => void)(); } catch (e) { thrown = e; }
+    this.assert(thrown !== undefined, `to throw an error`);
+    if (thrown !== undefined && errOrMsg !== undefined) {
+      const msg = thrown instanceof Error ? thrown.message : String(thrown);
+      const ok = typeof errOrMsg === 'string' ? msg.includes(errOrMsg)
+        : errOrMsg instanceof RegExp ? errOrMsg.test(msg)
+        : thrown instanceof errOrMsg;
+      this.assert(ok, `to throw matching ${String(errOrMsg)} (got "${msg}")`);
+    }
+    return this;
+  }
+  toBeInstanceOf(ctor: new (...a: unknown[]) => unknown): this {
+    this.assert(this.actual instanceof ctor, `to be instance of ${ctor.name}`); return this;
+  }
+  toHaveProperty(name: string, value?: unknown): this {
+    if (arguments.length > 1) return this.property(name, value);
+    return this.property(name);
+  }
+  toHaveLength(n: number): this { return this.lengthOf(n); }
+  toBeGreaterThan(n: number): this { return this.above(n); }
+  toBeGreaterThanOrEqual(n: number): this { return this.least(n); }
+  toBeLessThan(n: number): this { return this.below(n); }
+  toBeLessThanOrEqual(n: number): this { return this.most(n); }
+  toBeCloseTo(n: number, precision = 2): this {
+    this.assert(Math.abs(Number(this.actual) - n) < 0.5 * 10 ** -precision, `to be close to ${n} (±${precision} digits)`); return this;
+  }
+  toMatchObject(fragment: Record<string, unknown>): this {
+    const v = this.actual as Record<string, unknown> | null;
+    const ok = !!v && typeof v === 'object' && Object.entries(fragment).every(([k, val]) => deepEqual(v[k], val));
+    this.assert(ok, `to match object ${fmt(fragment)}`); return this;
+  }
 }
 
 function fmt(v: unknown): string {

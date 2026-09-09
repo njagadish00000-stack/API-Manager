@@ -4,7 +4,7 @@
 import React, { useEffect, useState } from 'react';
 import { call, onEventType } from './bridge';
 import { useApp, type OpenTab } from './state';
-import { CodeArea, EnvSelect, fmtBytes, fmtMs, JsonView, KVEditor, Modal, SubTabs, ts, uid, type SubTab } from './components';
+import { bodyExport, CodeArea, countMatches, EnvSelect, escapeTextHtml, fmtBytes, fmtMs, fullResponseJson, JsonView, KVEditor, markSearch, Modal, saveBlob, SubTabs, ts, uid, type SubTab } from './components';
 import type { ApiRequest, ApiResponse, AuthConfig, KeyValue, RequestBody , FormDataField } from '../shared/types';
 
 const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
@@ -55,6 +55,8 @@ export function RequestPage(props: { tab: OpenTab }): React.ReactElement {
   const [showCodegen, setShowCodegen] = useState(false);
   const [zoom, setZoom] = useState(1);
   const [nowrap, setNowrap] = useState(false);
+  const [respSearch, setRespSearch] = useState<string | null>(null); // null = search closed
+  const [activeHit, setActiveHit] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [errored, setErrored] = useState<string | null>(null);
 
@@ -208,10 +210,11 @@ export function RequestPage(props: { tab: OpenTab }): React.ReactElement {
         </div>
 
         <div style={{ borderTop: '2px solid var(--border)', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          <ResponseTopBar resp={resp} errored={errored} zoom={zoom} setZoom={setZoom} nowrap={nowrap} setNowrap={setNowrap} />
+          <ResponseTopBar resp={resp} errored={errored} zoom={zoom} setZoom={setZoom} nowrap={nowrap} setNowrap={setNowrap}
+            search={respSearch} setSearch={(v) => { setRespSearch(v); setActiveHit(0); }} activeHit={activeHit} setActiveHit={setActiveHit} />
           <SubTabs tabs={respSubtabs} active={respTab} onChange={setRespTab} />
-          <div style={{ flex: 1, overflow: 'auto', minHeight: 0, padding: '10px' }}>
-            {respTab === 'body' && <ResponseBody resp={resp} errored={errored} zoom={zoom} nowrap={nowrap} />}
+          <div id="resp-scroll" style={{ flex: 1, overflow: 'auto', minHeight: 0, padding: '10px' }}>
+            {respTab === 'body' && <ResponseBody resp={resp} errored={errored} zoom={zoom} nowrap={nowrap} search={respSearch} activeHit={activeHit} />}
             {respTab === 'headers' && (resp ? (
               <table className="tbl"><tbody>
                 {resp.headers.map((h, i) => <tr key={i}><td className="mono" style={{ width: 320 }}>{h.key}</td><td className="mono">{h.value}</td></tr>)}
@@ -518,38 +521,108 @@ function RequestSettingsEditor(props: { req: ApiRequest; patch: (p: Partial<ApiR
 }
 
 // ---------------------------------------------------------------------------
-function ResponseTopBar(props: { resp: ApiResponse | null; errored: string | null; zoom: number; setZoom: (z: number) => void; nowrap: boolean; setNowrap: (b: boolean) => void }): React.ReactElement {
+function MenuButton(props: { label: string; title?: string; actions: { label: string; run: () => void; disabled?: boolean }[] }): React.ReactElement {
+  const [open, setOpen] = useState(false);
+  return (
+    <span style={{ position: 'relative', display: 'inline-flex' }}>
+      <button className="btn xs" title={props.title} onClick={() => setOpen((v) => !v)}>{props.label} ▾</button>
+      {open && (
+        <span className="ctx-menu mono" style={{ position: 'absolute', right: 0, top: '100%', zIndex: 500, fontSize: 12 }}
+          onMouseLeave={() => setOpen(false)} onClick={(e) => e.stopPropagation()}>
+          {props.actions.map((a) => (
+            <div key={a.label} className="ci" style={a.disabled ? { opacity: .45, pointerEvents: 'none' } : undefined}
+              onClick={() => { a.run(); setOpen(false); }}>{a.label}</div>
+          ))}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function ResponseTopBar(props: {
+  resp: ApiResponse | null; errored: string | null; zoom: number; setZoom: (z: number) => void;
+  nowrap: boolean; setNowrap: (b: boolean) => void;
+  search: string | null; setSearch: (v: string | null) => void; activeHit: number; setActiveHit: (n: number) => void;
+}): React.ReactElement {
   if (props.errored && !props.resp) {
     return <div className="resp-top"><span className="badge-pill red">Error</span><span className="mono" style={{ color: 'var(--red)', fontSize: 12 }}>{props.errored}</span></div>;
   }
   const r = props.resp;
   if (!r) return <div className="resp-top"><span className="muted">Send a request to see the response here.</span></div>;
+  const body = r.bodyText ?? '';
+  const hits = countMatches(body, props.search ?? '');
+  const disabledNoBody = body.length === 0;
   return (
-    <div className="resp-top">
-      <span className="resp-status" style={{ color: r.status < 300 ? 'var(--green)' : r.status < 500 ? 'var(--yellow)' : 'var(--red)' }}>{r.status}</span>
-      <span className="dim">{r.statusText}</span>
-      <span className="dim mono">{fmtMs(r.timing?.totalMs ?? 0)}</span>
-      <span className="dim mono">{fmtBytes(r.bodySize ?? 0)}</span>
-      <span className="spacer" />
-      <button className="btn xs" title="Zoom out" onClick={() => props.setZoom(Math.max(.5, +(props.zoom - .1).toFixed(2)))}>−</button>
-      <button className="btn xs" title="Zoom in" onClick={() => props.setZoom(Math.min(2.5, +(props.zoom + .1).toFixed(2)))}>＋</button>
-      <button className="btn xs" onClick={() => props.setNowrap(!props.nowrap)}>{props.nowrap ? 'Word wrap' : 'No wrap'}</button>
-      <button className="btn xs" onClick={() => void navigator.clipboard.writeText(r.bodyText ?? '')}>Copy</button>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <div className="resp-top">
+        <span className="resp-status" style={{ color: r.status < 300 ? 'var(--green)' : r.status < 500 ? 'var(--yellow)' : 'var(--red)' }}>{r.status}</span>
+        <span className="dim">{r.statusText}</span>
+        <span className="dim mono">{fmtMs(r.timing?.totalMs ?? 0)}</span>
+        <span className="dim mono">{fmtBytes(r.bodySize ?? 0)}</span>
+        <span className={`badge-pill ${props.search != null ? 'green' : 'grey'}`}
+          title="Search in response body" role="button" style={{ cursor: 'pointer' }}
+          onClick={() => props.setSearch(props.search == null ? '' : null)}>🔍 search</span>
+        <span className="spacer" />
+        <button className="btn xs" title="Zoom out" onClick={() => props.setZoom(Math.max(.5, +(props.zoom - .1).toFixed(2)))}>−</button>
+        <button className="btn xs" title="Zoom in" onClick={() => props.setZoom(Math.min(2.5, +(props.zoom + .1).toFixed(2)))}>＋</button>
+        <button className="btn xs" title="Toggle word wrap" onClick={() => props.setNowrap(!props.nowrap)}>{props.nowrap ? 'Word wrap' : 'No wrap'}</button>
+        <MenuButton label="Copy" title="Copy response to clipboard" actions={[
+          { label: 'Copy body', disabled: disabledNoBody, run: () => void navigator.clipboard.writeText(body) },
+          { label: 'Copy body as JSON', disabled: disabledNoBody, run: () => void navigator.clipboard.writeText(bodyExport(r).content) },
+          { label: 'Copy response as JSON (with headers)', run: () => void navigator.clipboard.writeText(fullResponseJson(r)) },
+        ]} />
+        <MenuButton label="Save" title="Download response to disk" actions={[
+          { label: 'Save body', disabled: disabledNoBody, run: () => { const e = bodyExport(r); saveBlob(e.name, e.mime, e.content); } },
+          { label: 'Save body as JSON', disabled: disabledNoBody, run: () => { const e = bodyExport(r); saveBlob(e.name.endsWith('.json') ? e.name : e.name + '.json', 'application/json', e.content); } },
+          { label: 'Save response as JSON (with headers)', run: () => saveBlob(`response-full-${r.status}.json`, 'application/json', fullResponseJson(r)) },
+        ]} />
+      </div>
+      {props.search != null && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 2px 2px' }}>
+          <input autoFocus className="sel" style={{ flex: 1, maxWidth: 340, height: 26, fontSize: 12 }} placeholder="Search response body…"
+            value={props.search}
+            onChange={(e) => { props.setSearch(e.target.value); props.setActiveHit(0); }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') props.setActiveHit(hits ? (props.activeHit + (e.shiftKey ? hits - 1 : 1)) % hits : 0);
+              if (e.key === 'Escape') props.setSearch(null);
+            }} />
+          <span className="dim mono" style={{ fontSize: 12, minWidth: 64 }}>{body === '' && props.search ? 'no body' : hits ? `${props.activeHit + 1}/${hits}` : (props.search ? '0 matches' : '')}</span>
+          <button className="btn xs" title="Previous match (Shift+Enter)" disabled={!hits}
+            onClick={() => props.setActiveHit(hits ? (props.activeHit + hits - 1) % hits : 0)}>↑</button>
+          <button className="btn xs" title="Next match (Enter)" disabled={!hits}
+            onClick={() => props.setActiveHit(hits ? (props.activeHit + 1) % hits : 0)}>↓</button>
+          <button className="btn xs" title="Close search (Esc)" onClick={() => props.setSearch(null)}>✕</button>
+        </div>
+      )}
     </div>
   );
 }
 
-function ResponseBody(props: { resp: ApiResponse | null; errored: string | null; zoom: number; nowrap: boolean }): React.ReactElement {
+function ResponseBody(props: { resp: ApiResponse | null; errored: string | null; zoom: number; nowrap: boolean; search: string | null; activeHit: number }): React.ReactElement {
   const r = props.resp;
+  const search = props.search ?? '';
+  // scroll to + accent the active search hit
+  useEffect(() => {
+    if (!search) return;
+    const el = document.getElementById(`resp-hit-${props.activeHit}`);
+    if (el) {
+      el.scrollIntoView({ block: 'center' });
+      el.classList.add('active');
+      return () => el.classList.remove('active');
+    }
+    return undefined;
+  }, [search, props.activeHit, r]);
+
   if (props.errored && !r) return <div className="muted">Request could not complete: {props.errored}</div>;
   if (!r) return <div className="empty"><div className="big">📭</div>Nothing here yet.</div>;
   const ct = (r.headers.find((h) => h.key.toLowerCase() === 'content-type')?.value ?? '').toLowerCase();
-  const body = r.bodyText ?? (r.bodyBase64 ? '(base64 body — see Download)' : '');
+  const body = r.bodyText ?? (r.bodyBase64 ? '(base64 body — use Save ▸ Save body to download)' : '');
   const style: React.CSSProperties = { zoom: props.zoom };
+  const marked = (text: string) => markSearch(escapeTextHtml(text), search);
   if (ct.includes('image/') && r.bodyBase64) {
     return <div style={style}><img src={`data:${ct.split(';')[0]};base64,${r.bodyBase64}`} alt="response body" /></div>;
   }
-  if (ct.includes('text/html')) {
+  if (ct.includes('text/html') && !search) {
     return (
       <div className="grid2">
         <div className="card zoomable" style={style} dangerouslySetInnerHTML={{ __html: sanitizeHtmlPreview(body.slice(0, 100_000)) }} />
@@ -557,13 +630,17 @@ function ResponseBody(props: { resp: ApiResponse | null; errored: string | null;
       </div>
     );
   }
+  if (ct.includes('text/html') && search) {
+    return <pre className={`resp-body ${props.nowrap ? 'nowrap' : ''}`} style={style} dangerouslySetInnerHTML={{ __html: marked(body) }} />;
+  }
   if (ct.includes('json') || body.trim().startsWith('{') || body.trim().startsWith('[')) {
-    return <div className="zoomable" style={style}><JsonView text={body} nowrap={props.nowrap} /></div>;
+    return <div className="zoomable" style={style}><JsonView text={body} nowrap={props.nowrap} search={search} /></div>;
   }
   if (ct.includes('xml') || body.trimStart().startsWith('<')) {
-    return <pre className={`resp-body ${props.nowrap ? 'nowrap' : ''}`} style={style}>{prettyXml(body)}</pre>;
+    return <pre className={`resp-body ${props.nowrap ? 'nowrap' : ''}`} style={style} dangerouslySetInnerHTML={{ __html: marked(prettyXml(body)) }} />;
   }
-  return <pre className={`resp-body ${props.nowrap ? 'nowrap' : ''}`} style={style}>{body || '(empty body)'}</pre>;
+  return <pre className={`resp-body ${props.nowrap ? 'nowrap' : ''}`} style={style}
+    dangerouslySetInnerHTML={{ __html: marked(body || '(empty body)') }} />;
 }
 
 function sanitizeHtmlPreview(html: string): string {

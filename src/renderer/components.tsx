@@ -146,7 +146,20 @@ export function useContextMenu(): { ctx: React.ReactElement | null; open: (e: Re
 
 // ---------------------------------------------------------------------------
 // JSON syntax highlighting read-only view
-export function JsonView(props: { text: string; nowrap?: boolean; maxHeight?: number }): React.ReactElement {
+import { markSearch } from './responseExport';
+export * from './responseExport';
+
+/** Download helper used by response "Save as..." actions (no server round-trips, fully offline). */
+export function saveBlob(name: string, mime: string, content: string): void {
+  const blob = new Blob([content], { type: mime });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = name;
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+export function JsonView(props: { text: string; nowrap?: boolean; maxHeight?: number; search?: string }): React.ReactElement {
   const html = useMemo(() => {
     const t = props.text;
     let out = '';
@@ -154,8 +167,8 @@ export function JsonView(props: { text: string; nowrap?: boolean; maxHeight?: nu
       const parsed = JSON.parse(t) as unknown;
       out = JSON.stringify(parsed, null, 2);
     } catch { out = t; }
-    return highlightJson(out);
-  }, [props.text]);
+    return markSearch(highlightJson(out), props.search ?? '');
+  }, [props.text, props.search]);
   return (
     <pre className={`resp-body ${props.nowrap ? 'nowrap' : ''}`} style={props.maxHeight ? { maxHeight: props.maxHeight, overflow: 'auto' } : undefined}
       dangerouslySetInnerHTML={{ __html: html }} />

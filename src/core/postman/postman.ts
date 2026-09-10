@@ -276,7 +276,10 @@ function postmanExamples(item: P, req: ApiRequest): RequestExample[] {
 }
 
 function postmanVar(v: P): Variable {
-  return { id: uid(), key: v.key ?? '', value: v.value ?? '', initialValue: v.value, type: v.type === 'secret' ? 'secret' : 'default', enabled: !v.disabled, description: v.description };
+  // Postman collection variables use `disabled: true`; exported environments
+  // use `enabled: false`. Honor both.
+  const enabled = v.enabled === false ? false : !v.disabled;
+  return { id: uid(), key: v.key ?? '', value: v.value ?? '', initialValue: v.value, type: v.type === 'secret' ? 'secret' : 'default', enabled, description: v.description };
 }
 
 function detectSecretsInCollection(parsed: P, out: NormalizedImport): void {

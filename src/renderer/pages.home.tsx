@@ -5,7 +5,6 @@
 import React, { useEffect, useState } from 'react';
 import { call } from './bridge';
 import { useApp } from './state';
-import { uid } from './components';
 
 export function HomePage(): React.ReactElement {
   const s = useApp();
@@ -39,7 +38,7 @@ export function HomePage(): React.ReactElement {
 
       <h3 style={{ marginTop: 22 }}>Quick actions</h3>
       <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
-        <button className="btn" onClick={() => s.openTab({ id: `req:new:${uid()}`, kind: 'request', title: 'Untitled' })}>＋ New request</button>
+        <button className="btn" onClick={() => s.openNewRequest()}>＋ New request</button>
         <button className="btn" onClick={() => { const name = prompt('Collection name'); if (name) void call('collection.create', { name }).then(() => s.refreshCollections()); }}>＋ New collection</button>
         <button className="btn" onClick={() => void quickImport('file')}>⬆ Import file (Postman/OpenAPI/WSDL/SOAPUI/HAR)</button>
         <button className="btn" onClick={() => void quickImport('text')}>⬆ Import raw text</button>

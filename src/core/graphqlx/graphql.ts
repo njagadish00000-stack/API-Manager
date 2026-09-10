@@ -32,9 +32,41 @@ export function validateGraphQL(query: string): { ok: boolean; errors: string[] 
       if (stack.pop() !== ch) { errors.push(`Unbalanced "${ch}"`); break; }
     }
   }
+  if (errors.length === 0 && stack.length > 0) {
+    errors.push(`Unbalanced: missing ${stack.reverse().join('')}`);
+  }
   if (errors.length > 0) return { ok: false, errors };
   if (!/query|mutation|subscription|\{/.test(stripped)) errors.push('Document contains no operation');
   return { ok: errors.length === 0, errors };
+}
+
+/** Indent/pretty-print a GraphQL query (offline, no parser dependency). */
+export function prettifyGraphQL(query: string): string {
+  const out: string[] = [];
+  let indent = 0;
+  let token = '';
+  const flush = (): void => {
+    const trimmed = token.trim();
+    if (trimmed) out.push(`${'  '.repeat(indent)}${trimmed}`);
+    token = '';
+  };
+  for (const ch of query) {
+    if (ch === '{') {
+      token = token.trim() + ' {';
+      flush();
+      indent += 1;
+    } else if (ch === '}') {
+      flush();
+      indent = Math.max(0, indent - 1);
+      out.push(`${'  '.repeat(indent)}}`);
+    } else if (ch === '\n' || ch === ',') {
+      flush();
+    } else {
+      token += ch;
+    }
+  }
+  flush();
+  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
 }
 
 export function buildGraphQLBody(query: string, variables: string, operationName?: string): string {

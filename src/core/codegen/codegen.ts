@@ -4,12 +4,16 @@
  */
 import type { ApiRequest, KeyValue } from '../../shared/types';
 import { buildUrl } from '../url/urlBuilder';
-import { generateCurl } from '../curl/curlGenerator';
+import { generateCurl, generateCurlCmd, generateCurlPowerShell } from '../curl/curlGenerator';
 
 export interface CodegenTargetSpec { language: string; label: string; variants: { id: string; label: string }[] }
 
 export const CODEGEN_TARGETS: CodegenTargetSpec[] = [
-  { language: 'curl', label: 'cURL', variants: [{ id: 'curl', label: 'cURL' }] },
+  { language: 'curl', label: 'cURL', variants: [
+    { id: 'bash', label: 'Linux / macOS (bash)' },
+    { id: 'cmd', label: 'Windows CMD' },
+    { id: 'powershell', label: 'PowerShell' },
+  ] },
   { language: 'python', label: 'Python', variants: [{ id: 'requests', label: 'requests' }, { id: 'httpx', label: 'httpx' }] },
   { language: 'java', label: 'Java', variants: [{ id: 'okhttp', label: 'OkHttp' }, { id: 'httpclient', label: 'Java 11 HttpClient' }, { id: 'webclient', label: 'Spring WebClient' }, { id: 'retrofit', label: 'Retrofit' }] },
   { language: 'javascript', label: 'JavaScript', variants: [{ id: 'fetch', label: 'fetch' }, { id: 'axios', label: 'Axios' }, { id: 'xhr', label: 'XMLHttpRequest' }] },
@@ -110,7 +114,11 @@ function headersCommentOutFormDataBoundary(p: PreparedRequest): KeyValue[] {
 }
 
 export function generateCode(request: ApiRequest, language: string, variant?: string, prepared?: PreparedRequest): string {
-  if (language === 'curl') return generateCurl({ request });
+  if (language === 'curl') {
+    if (variant === 'cmd') return generateCurlCmd({ request });
+    if (variant === 'powershell') return generateCurlPowerShell({ request });
+    return generateCurl({ request });
+  }
   const p = prepared ?? prepare(request);
   const v = variant ?? CODEGEN_TARGETS.find((t) => t.language === language)?.variants[0].id ?? '';
   const headers = headersCommentOutFormDataBoundary(p);

@@ -21,6 +21,71 @@ interface SseSession {
 
 const sessions = new Map<string, SseSession>();
 
+/**
+ * Incremental Server-Sent Events parser (§28). Feed arbitrary text chunks —
+ * including frames split across chunks — and receive complete events.
+ * Pure/stateful so it can be unit tested without a network connection.
+ */
+export interface SseParsedFrame { event?: string; data: string; id?: string }
+export interface SseParser {
+  feed(text: string): void;
+  /** Emit any buffered, unterminated frame (used at stream end). */
+  flush(): void;
+}
+export function createSseParser(onFrame: (f: SseParsedFrame) => void, onRetry?: (retryMs: number) => void): SseParser {
+  let buffer = '';
+  let dataBuf = '';
+  let evName: string | undefined;
+  let evId: string | undefined;
+
+  const dispatch = (): void => {
+    if (dataBuf !== '') {
+      onFrame({ event: evName, data: dataBuf.replace(/\n$/, ''), id: evId });
+    }
+    dataBuf = ''; evName = undefined; evId = undefined;
+  };
+
+  const handleLine = (rawLine: string): void => {
+    const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
+    if (line === '') { dispatch(); return; }
+    if (line.startsWith(':')) return; // comment / keepalive
+    const colon = line.indexOf(':');
+    const field = colon === -1 ? line : line.slice(0, colon);
+    let value = colon === -1 ? '' : line.slice(colon + 1);
+    if (value.startsWith(' ')) value = value.slice(1);
+    switch (field) {
+      case 'data': dataBuf += value + '\n'; break;
+      case 'event': evName = value; break;
+      case 'id': if (!value.includes('\u0000')) evId = value; break;
+      case 'retry': {
+        const n = Number(value);
+        if (Number.isFinite(n) && n >= 0) onRetry?.(Math.round(n));
+        break;
+      }
+      default: break; // unknown fields ignored per spec
+    }
+  };
+
+  return {
+    feed(text: string): void {
+      buffer += text;
+      let idx: number;
+      // SSE frames are separated by LF; CRLF handled per-line.
+      while ((idx = buffer.indexOf('\n')) >= 0) {
+        const rawLine = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 1);
+        handleLine(rawLine);
+      }
+    },
+    flush(): void {
+      if (buffer) handleLine(buffer);
+      // A stream ending without a blank line still delivers the pending frame.
+      if (dataBuf !== '') dispatch();
+      buffer = '';
+    },
+  };
+}
+
 export function sseList(): string[] { return [...sessions.keys()]; }
 export function sseClose(sessionId: string): void {
   const s = sessions.get(sessionId);
@@ -50,40 +115,16 @@ async function pump(session: SseSession, emit: SessionEmitter): Promise<void> {
         maxRedirections: 5,
       });
       if (res.statusCode >= 400) throw new Error(`SSE connect failed: HTTP ${res.statusCode}`);
-      let dataBuf = '';
-      let evName: string | undefined;
-      let evId: string | undefined;
+      const parser = createSseParser((ev) => {
+        emit('sse.frame', { sessionId: session.id, ...ev });
+        if (ev.id !== undefined) session.lastEventId = ev.id;
+      }, (retryMs) => { session.retryMs = retryMs; });
       for await (const chunk of res.body) {
         if (session.closed) break;
         const text = (typeof chunk === 'string' ? chunk : Buffer.from(chunk).toString('utf8'));
-        for (const rawLine of text.split('\n')) {
-          const line = rawLine.endsWith('\r') ? rawLine.slice(0, -1) : rawLine;
-          if (line === '') {
-            if (dataBuf !== '') {
-              const ev: SseFrameEvent = { sessionId: session.id, event: evName, data: dataBuf.replace(/\n$/, ''), id: evId };
-              emit('sse.frame', ev);
-              if (evId !== undefined) session.lastEventId = evId;
-            }
-            dataBuf = ''; evName = undefined; evId = undefined;
-            continue;
-          }
-          if (line.startsWith(':')) continue; // comment/keepalive
-          const colon = line.indexOf(':');
-          const field = colon === -1 ? line : line.slice(0, colon);
-          let value = colon === -1 ? '' : line.slice(colon + 1);
-          if (value.startsWith(' ')) value = value.slice(1);
-          switch (field) {
-            case 'data': dataBuf += value + '\n'; break;
-            case 'event': evName = value; break;
-            case 'id': evId = value; break;
-            case 'retry': {
-              const n = Number(value);
-              if (Number.isFinite(n) && n >= 0) session.retryMs = n;
-              break;
-            }
-          }
-        }
+        parser.feed(text);
       }
+      parser.flush();
       if (session.closed) break;
       emit('sse.frame', { sessionId: session.id, event: 'sys', data: `stream ended; reconnecting in ${session.retryMs}ms` });
     } catch (e) {

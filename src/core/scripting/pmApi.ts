@@ -6,6 +6,15 @@
 import type { ApiRequest, ApiResponse, KeyValue, TestResult } from '../../shared/types';
 import { getByPath, parseJson } from '../jsonx/jsonUtils';
 
+/**
+ * Realm-safe RegExp check. Scripts run inside a Node `vm` context, so a regex
+ * literal in user code is an instance of the *vm realm's* RegExp and fails a
+ * host-side `instanceof RegExp`. toString tagging works across realms.
+ */
+function isRegExp(v: unknown): v is RegExp {
+  return Object.prototype.toString.call(v) === '[object RegExp]';
+}
+
 export type SendRequestFn = (
   req: string | { url: string; method?: string; header?: Record<string, string> | KeyValue[]; body?: string | { raw?: string; mode?: string } },
 ) => Promise<ApiResponse>;
@@ -164,7 +173,7 @@ class ExpectChain {
     return this;
   }
   toMatch(reOrStr: RegExp | string): this {
-    const re = reOrStr instanceof RegExp ? reOrStr : new RegExp(String(reOrStr).replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
+    const re = isRegExp(reOrStr) ? reOrStr : new RegExp(String(reOrStr).replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&'));
     this.assert(re.test(String(this.actual)), `to match ${re}`); return this;
   }
   toThrow(errOrMsg?: RegExp | string | (new (...a: unknown[]) => Error)): this {
@@ -173,10 +182,13 @@ class ExpectChain {
     try { (this.actual as () => void)(); } catch (e) { thrown = e; }
     this.assert(thrown !== undefined, `to throw an error`);
     if (thrown !== undefined && errOrMsg !== undefined) {
-      const msg = thrown instanceof Error ? thrown.message : String(thrown);
+      // cross-realm (vm) errors aren't host `instanceof Error`; duck-type .message
+      const msg = thrown && typeof thrown === 'object' && 'message' in (thrown as object)
+        ? String((thrown as { message: unknown }).message)
+        : String(thrown);
       const ok = typeof errOrMsg === 'string' ? msg.includes(errOrMsg)
-        : errOrMsg instanceof RegExp ? errOrMsg.test(msg)
-        : thrown instanceof errOrMsg;
+        : isRegExp(errOrMsg) ? errOrMsg.test(msg)
+        : (() => { try { return thrown instanceof (errOrMsg as new (...a: unknown[]) => Error); } catch { return false; } })();
       this.assert(ok, `to throw matching ${String(errOrMsg)} (got "${msg}")`);
     }
     return this;

@@ -1,14 +1,35 @@
 /**
- * Request page: full request editor + response viewer (§HTTP workbench).
+ * Request page: full request editor + response viewer (HTTP workbench).
+ *
+ * Custom controls implemented here (see CUSTOM_FEATURES.md):
+ *  - response zoom out / % / in / reset with Ctrl+= Ctrl+- Ctrl+0
+ *  - response word wrap ON/OFF (persisted)
+ *  - Copy: Body · Headers · Headers+Body · Status+Headers+Body (with confirmation)
+ *  - Download: Body · Headers · Headers+Body · Raw response (content-type extensions)
+ *  - response search: next/prev/count, case-sensitive / whole-word / regex
+ *  - request body toolbar: zoom · wrap · find · replace · format
+ *  - per-tab drafts + viewer state survive restarts via the crash-safe session
  */
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { call, onEventType } from './bridge';
 import { useApp, type OpenTab } from './state';
-import { bodyExport, CodeArea, countMatches, EnvSelect, escapeTextHtml, fmtBytes, fmtMs, fullResponseJson, JsonView, KVEditor, markSearch, Modal, saveBlob, SubTabs, ts, uid, type SubTab } from './components';
-import type { ApiRequest, ApiResponse, AuthConfig, KeyValue, RequestBody , FormDataField } from '../shared/types';
+import {
+  CodeArea, countMatches, EnvSelect, escapeTextHtml, fmtBytes, fmtMs, JsonView, KVEditor,
+  Modal, saveBlob, SubTabs, ts, uid, type SubTab,
+} from './components';
+import { CodeEditorField } from './CodeEditorField';
+import { MonacoEditor } from './MonacoEditor';
+import type { ApiRequest, ApiResponse, AuthConfig, KeyValue, RequestBody, FormDataField } from '../shared/types';
+import {
+  copyBundles, downloadBundles, zoomIn as zIn, zoomOut as zOut, zoomPct, clampZoom,
+  suggestExtension,
+} from '../core/response/responseFormat';
+import { markSearch, buildSearchRegExp, type SearchOptions } from './responseExport';
 
-const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS'];
-const BODY_TYPES = ['none', 'json', 'xml', 'text', 'form-urlencoded', 'multipart', 'graphql', 'binary-file'] as const;
+type CoreSearchOpts = SearchOptions;
+
+const METHODS = ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD', 'OPTIONS', 'TRACE', 'CONNECT'];
+const BODY_TYPES = ['none', 'json', 'xml', 'html', 'javascript', 'text', 'graphql', 'urlencoded', 'form-data', 'binary'] as const;
 
 function defaultSettings(): ApiRequest['settings'] {
   return {
@@ -36,6 +57,7 @@ interface SendResultPayload {
   resolvedUrl: string;
 }
 interface TestRow { name: string; passed: boolean; error?: string; source?: string }
+interface SearchState extends CoreSearchOpts { }
 
 export function RequestPage(props: { tab: OpenTab }): React.ReactElement {
   const s = useApp();
@@ -53,25 +75,42 @@ export function RequestPage(props: { tab: OpenTab }): React.ReactElement {
   const [showSaveTo, setShowSaveTo] = useState(false);
   const [showCurlImport, setShowCurlImport] = useState(false);
   const [showCodegen, setShowCodegen] = useState(false);
-  const [zoom, setZoom] = useState(1);
-  const [nowrap, setNowrap] = useState(false);
-  const [respSearch, setRespSearch] = useState<string | null>(null); // null = search closed
+  const [zoom, setZoom] = useState(() => clampZoom(s.settings?.editor.responseZoom ?? 1));
+  const [wrap, setWrap] = useState(() => s.settings?.editor.wordWrap ?? false);
+  const [respSearch, setRespSearch] = useState<string | null>(null);
+  const [searchState, setSearchState] = useState<SearchState>({});
   const [activeHit, setActiveHit] = useState(0);
   const [dirty, setDirty] = useState(false);
   const [errored, setErrored] = useState<string | null>(null);
 
   const isNew = props.tab.id.startsWith('req:new:');
 
+  // ---- load entity or restore a draft ----
   useEffect(() => {
-    setResp(null); setDirty(false);
+    setResp(null);
+    const draft = props.tab.draft;
+    setSubtab(props.tab.view?.builderTab ?? 'params');
+    setRespTab(props.tab.view?.responseTab ?? 'body');
+    if (props.tab.view?.responseZoom) setZoom(clampZoom(props.tab.view.responseZoom));
+    if (typeof props.tab.view?.responseWrap === 'boolean') setWrap(props.tab.view.responseWrap);
+    if (draft) { setReq(draft); setDirty(!!props.tab.dirty); return; }
     if (isNew || !props.tab.entityId) { setReq(emptyRequest(s.workspaceId)); return; }
+    let alive = true;
     void call<ApiRequest>('request.get', { id: props.tab.entityId }).then((r) => {
-      setReq(r);
-      void call<ApiResponse[]>('http.recentResponses', { requestId: r.id, limit: 1 }).then((rs) => setResp(rs[0] ?? null)).catch(() => undefined);
-    }).catch(() => setReq(emptyRequest(s.workspaceId)));
+      if (!alive) return;
+      setReq(r); setDirty(false);
+      void call<ApiResponse[]>('http.recentResponses', { requestId: r.id, limit: 1 }).then((rs) => alive && setResp(rs[0] ?? null)).catch(() => undefined);
+    }).catch(() => alive && setReq(emptyRequest(s.workspaceId)));
+    return () => { alive = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [props.tab.entityId, isNew, s.workspaceId]);
 
-  useEffect(() => { if (req) s.markDirty(props.tab.id, dirty); }, [dirty, props.tab.id, req, s]);
+  // persist zoom/wrap preference and per-tab view state
+  useEffect(() => { void s.patchResponseViewer({ zoom, wordWrap: wrap }); }, [zoom]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { void s.patchResponseViewer({ wordWrap: wrap }); }, [wrap]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { s.updateTabView(props.tab.id, { builderTab: subtab, responseTab: respTab, responseZoom: zoom, responseWrap: wrap }); }, [subtab, respTab]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  useEffect(() => { if (req) s.markDirty(props.tab.id, dirty); }, [dirty]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => onEventType<import('../shared/events').RequestProgressEvent>('request.progress', (payload) => {
     if (payload.phase === 'done') { setProgress(null); return; }
@@ -85,18 +124,52 @@ export function RequestPage(props: { tab: OpenTab }): React.ReactElement {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [req, dirty]);
 
-  useEffect(() => { if (req) setDirty(false); /* reset when switching entities */ // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [req?.id]);
+  // ---- keyboard: response zoom + Ctrl+F search + Ctrl+Enter send ----
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      const key = e.key;
+      const inMonaco = (e.target as HTMLElement)?.closest?.('.monaco-editor');
+      const inField = inMonaco || ['INPUT', 'TEXTAREA', 'SELECT'].includes((e.target as HTMLElement)?.tagName);
+      if (key === '=' || key === '+' || key === '-') {
+        if (inField && !inMonaco) return; // don't hijack typing in tiny inputs
+        e.preventDefault();
+        setZoom((z) => key === '-' ? zOut(z) : zIn(z));
+      } else if (key === '0') {
+        if (inField && !inMonaco) return;
+        e.preventDefault();
+        setZoom(1);
+      } else if (key.toLowerCase() === 'f' && !inField && resp) {
+        e.preventDefault();
+        setRespSearch((v) => v ?? '');
+      } else if (key === 'Enter' && inField) {
+        e.preventDefault(); void sendRequest();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resp]);
 
-  const patch = (p: Partial<ApiRequest>): void => { setReq((r) => (r ? { ...r, ...p } : r)); setDirty(true); };
+  const patch = (p: Partial<ApiRequest>): void => {
+    setReq((r) => {
+      if (!r) return r;
+      const next = { ...r, ...p };
+      s.updateTabDraft(props.tab.id, next, true);
+      return next;
+    });
+    setDirty(true);
+  };
 
   const saveRequest = async (): Promise<void> => {
     if (!req) return;
     if (!req.collectionId) { setShowSaveTo(true); return; }
-    const { id, workspaceId, favorite, sortOrder, createdAt, updatedAt, ...rest } = req;
-    void sortOrder; void createdAt; void updatedAt; void favorite;
+    const { id: _id, workspaceId: _w, favorite, sortOrder, createdAt, updatedAt, ...rest } = req;
+    void favorite; void sortOrder; void createdAt; void updatedAt;
     await call('request.update', { id: req.id, patch: rest });
     setDirty(false);
+    s.convertDraftTab(props.tab.id, req);
     void s.refreshCollections();
     s.toast('ok', 'Request saved');
   };
@@ -112,11 +185,9 @@ export function RequestPage(props: { tab: OpenTab }): React.ReactElement {
       setErrored(result.error ? String(result.error) : null);
       setResp(result.response ?? null);
       setPreResults(result.preTestResults ?? []);
-      setPostResults(result.postTestResults ?? []);
+      setPostResults([...(result.preTestResults ?? []), ...(result.postTestResults ?? []), ...(result.assertionResults ?? [])] as TestRow[]);
       setConsoleLogs(result.consoleLogs ?? []);
       setVariableTrace(result.variableTrace ?? []);
-      setPostResults([...(result.preTestResults ?? []), ...(result.postTestResults ?? []), ...(result.assertionResults ?? [])] as TestRow[]);
-      setPreResults([]);
       setResolvedUrl(result.resolvedUrl ?? '');
       setRespTab(result.error ? 'console' : 'body');
       void s.refreshCollections();
@@ -154,31 +225,45 @@ export function RequestPage(props: { tab: OpenTab }): React.ReactElement {
     { id: 'compare', label: 'Compare' },
   ];
 
+  const onSplitDrag = (e: React.MouseEvent): void => {
+    e.preventDefault();
+    const container = (e.currentTarget as HTMLElement).parentElement?.getBoundingClientRect();
+    if (!container) return;
+    const move = (ev: MouseEvent): void => {
+      const ratio = (ev.clientY - container.top) / container.height;
+      s.setSplitRatio(ratio);
+    };
+    const up = (): void => { window.removeEventListener('mousemove', move); window.removeEventListener('mouseup', up); void s.flushSession(); };
+    window.addEventListener('mousemove', move);
+    window.addEventListener('mouseup', up);
+  };
+
   return (
-    <div style={{ height: '100%', display: 'grid', gridTemplateRows: 'auto auto minmax(0,1fr) auto' }}>
+    <div style={{ height: '100%', display: 'grid', gridTemplateRows: 'auto auto minmax(0,1fr)' }}>
       <div style={{ display: 'grid', gridTemplateColumns: '110px 1fr 170px 72px 76px 42px', gap: 8, padding: '10px 10px 6px' }}>
-        <select className="input sm" value={req.method} onChange={(e) => patch({ method: e.target.value as ApiRequest['method'] })}>
+        <select className="input sm" value={req.method} onChange={(e) => patch({ method: e.target.value as ApiRequest['method'] })}
+          title="HTTP method">
           {METHODS.map((m) => <option key={m}>{m}</option>)}
         </select>
-        <input className="input" placeholder="Enter request URL (paste cURL to import)…" value={req.url}
+        <input className="input" placeholder="Enter request URL (paste cURL to import)…  Ctrl+Enter to send" value={req.url}
           onChange={(e) => patch({ url: e.target.value })}
           onPaste={(e) => { const text = e.clipboardData.getData('text'); if (text.trimStart().startsWith('curl ')) { e.preventDefault(); setShowCurlImport(true); } }}
           onKeyDown={(e) => { if (e.key === 'Enter') void sendRequest(); }} />
         <EnvSelect />
-        <button className="btn primary" onClick={() => void sendRequest()} disabled={!!progress}>{progress ? '…' : 'Send'}</button>
+        <button className="btn primary" onClick={() => void sendRequest()} disabled={!!progress} accessKey="s">{progress ? '…' : 'Send'}</button>
         <button className="btn" onClick={() => void saveRequest()}>{dirty ? 'Save*' : 'Save'}</button>
-        <button className="btn" onClick={() => setShowSaveTo(true)}>⌄</button>
+        <button className="btn" title="Save as / choose collection" onClick={() => setShowSaveTo(true)}>⌄</button>
       </div>
       <div className="row pad-x" style={{ gap: 10, paddingBottom: 6 }}>
         <button className="btn xs" onClick={() => setShowCurlImport(true)}>⌗ from cURL</button>
-        <button className="btn xs" onClick={() => setShowCodegen(true)}>{'< / > code'}</button>
+        <button className="btn xs" onClick={() => setShowCodegen(true)}>{'</ > code'}</button>
         {resolvedUrl && <span className="mono dim" style={{ fontSize: 11.5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '46%' }}>resolved: {resolvedUrl}</span>}
         {progress && <span className="dim" style={{ fontSize: 11.5 }}>{progress}{' '}<button className="link" onClick={() => void cancel()}>cancel</button></span>}
         <span className="spacer" />
         {dirty && <span className="muted" style={{ fontSize: 11.5 }}>unsaved</span>}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateRows: 'minmax(0, 44%) minmax(0, 1fr)', minHeight: 0, borderTop: '1px solid var(--border)' }}>
+      <div style={{ display: 'grid', gridTemplateRows: `minmax(0, ${s.splitRatio * 100}fr) 7px minmax(0, 1fr)`, minHeight: 0 }}>
         <div style={{ overflow: 'auto', minHeight: 0 }}>
           <SubTabs tabs={subtabs} active={subtab} onChange={setSubtab} />
           <div className="pad" style={{ paddingTop: 10 }}>
@@ -190,12 +275,12 @@ export function RequestPage(props: { tab: OpenTab }): React.ReactElement {
               <div className="grid2">
                 <div>
                   <div className="section-title">Pre-request script (pm.*)</div>
-                  <CodeArea value={req.scripts.preRequest ?? ''} minRows={10}
+                  <CodeEditorField value={req.scripts.preRequest ?? ''} language="javascript" minHeight={260}
                     onChange={(preRequest) => patch({ scripts: { ...req.scripts, preRequest } })} />
                 </div>
                 <div>
                   <div className="section-title">Post-response / tests (pm.test)</div>
-                  <CodeArea value={req.scripts.postResponse ?? ''} minRows={10}
+                  <CodeEditorField value={req.scripts.postResponse ?? ''} language="javascript" minHeight={260}
                     onChange={(postResponse) => patch({ scripts: { ...req.scripts, postResponse } })} />
                 </div>
               </div>
@@ -203,22 +288,38 @@ export function RequestPage(props: { tab: OpenTab }): React.ReactElement {
             {subtab === 'tests' && <AssertionsPanel req={req} patch={patch} />}
             {subtab === 'settings' && <RequestSettingsEditor req={req} patch={patch} />}
             {subtab === 'notes' && (
-              <CodeArea minRows={6} placeholder="Markdown documentation for this request…"
-                value={req.documentation ?? ''} onChange={(documentation) => patch({ documentation })} />
+              <CodeEditorField value={req.documentation ?? ''} language="markdown" minHeight={200} showToolbar={false}
+                placeholder="Markdown documentation for this request…"
+                onChange={(documentation) => patch({ documentation })} />
             )}
           </div>
         </div>
 
-        <div style={{ borderTop: '2px solid var(--border)', minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          <ResponseTopBar resp={resp} errored={errored} zoom={zoom} setZoom={setZoom} nowrap={nowrap} setNowrap={setNowrap}
-            search={respSearch} setSearch={(v) => { setRespSearch(v); setActiveHit(0); }} activeHit={activeHit} setActiveHit={setActiveHit} />
+        <div className="split-drag" onMouseDown={onSplitDrag} title="Drag to resize" />
+
+        <div style={{ minHeight: 0, display: 'flex', flexDirection: 'column' }}>
+          <ResponseTopBar
+            resp={resp} errored={errored}
+            zoom={zoom} setZoom={(z) => setZoom(clampZoom(z))}
+            wrap={wrap} setWrap={setWrap}
+            search={respSearch} setSearch={(v) => { setRespSearch(v); setActiveHit(0); }}
+            searchState={searchState} setSearchState={setSearchState}
+            activeHit={activeHit} setActiveHit={setActiveHit}
+            req={req}
+          />
           <SubTabs tabs={respSubtabs} active={respTab} onChange={setRespTab} />
           <div id="resp-scroll" style={{ flex: 1, overflow: 'auto', minHeight: 0, padding: '10px' }}>
-            {respTab === 'body' && <ResponseBody resp={resp} errored={errored} zoom={zoom} nowrap={nowrap} search={respSearch} activeHit={activeHit} />}
+            {respTab === 'body' && <ResponseBody resp={resp} errored={errored} zoom={zoom} wrap={wrap} search={respSearch} searchState={searchState} activeHit={activeHit} />}
             {respTab === 'headers' && (resp ? (
-              <table className="tbl"><tbody>
-                {resp.headers.map((h, i) => <tr key={i}><td className="mono" style={{ width: 320 }}>{h.key}</td><td className="mono">{h.value}</td></tr>)}
-              </tbody></table>
+              <div>
+                <div className="row" style={{ marginBottom: 6 }}>
+                  <button className="btn xs" onClick={() => { void navigator.clipboard.writeText(copyBundles(withSnap(resp, req)).headers.content); s.toast('ok', 'Response headers copied'); }}>Copy headers</button>
+                  <button className="btn xs" onClick={() => { const d = downloadBundles(withSnap(resp, req)).headers; saveBlob(d.name, d.mime, d.content); s.toast('ok', `Downloaded ${d.name}`); }}>Download headers</button>
+                </div>
+                <table className="tbl"><tbody>
+                  {resp.headers.map((h, i) => <tr key={i}><td className="mono" style={{ width: 320 }}>{h.key}</td><td className="mono">{h.value}</td></tr>)}
+                </tbody></table>
+              </div>
             ) : <div className="muted">—</div>)}
             {respTab === 'cookies' && <CookiesTab workspaceId={s.workspaceId} />}
             {respTab === 'timeline' && (resp ? <Timeline resp={resp} /> : <div className="muted">—</div>)}
@@ -249,7 +350,7 @@ export function RequestPage(props: { tab: OpenTab }): React.ReactElement {
         </div>
       </div>
 
-      <div className="row pad" style={{ borderTop: '1px solid var(--border)', gap: 8 }}>
+      <div className="row pad" style={{ borderTop: '1px solid var(--border)', gap: 8, marginTop: 4 }}>
         <span className="lbl" style={{ margin: 0 }}>Save to:</span>
         <select className="input sm" style={{ width: 220 }} value={req.collectionId ?? ''} onChange={(e) => patch({ collectionId: e.target.value || undefined, folderId: undefined })}>
           <option value="">(choose a collection)</option>
@@ -262,45 +363,36 @@ export function RequestPage(props: { tab: OpenTab }): React.ReactElement {
           </select>
         )}
         <span className="spacer" />
-        {resp && (
-          <button className="btn sm" onClick={() => {
-            const ext = guessExt(resp);
-            const content = resp.bodyBase64 ?? base64Of(resp.bodyText ?? '');
-            void call<{ path: string } | null>('dialog.saveFile', { defaultName: `response.${ext}`, contentBase64: content })
-              .then((r) => { if (r) s.toast('ok', `Saved ${r.path}`); });
-          }}>⬇ Download</button>
-        )}
       </div>
 
-      {showSaveTo && <SaveToModal req={req} onClose={() => setShowSaveTo(false)} onSaved={() => { setShowSaveTo(false); setDirty(false); void s.refreshCollections(); }} />}
+      {showSaveTo && <SaveToModal tab={props.tab} req={req} onClose={() => setShowSaveTo(false)}
+        onSaved={(saved) => { setShowSaveTo(false); setDirty(false); setReq(saved); s.convertDraftTab(props.tab.id, saved); void s.refreshCollections(); s.toast('ok', 'Request saved'); }} />}
       {showCurlImport && <CurlImportModal onClose={() => setShowCurlImport(false)}
-        onApply={(r) => { setReq({ ...emptyRequest(s.workspaceId), ...r }); setDirty(true); setShowCurlImport(false); s.toast('ok', 'cURL parsed'); }} />}
+        onApply={(r) => { setReq({ ...emptyRequest(s.workspaceId), ...r }); setDirty(true); s.updateTabDraft(props.tab.id, { ...emptyRequest(s.workspaceId), ...r }, true); setShowCurlImport(false); s.toast('ok', 'cURL parsed'); }} />}
       {showCodegen && <CodegenModal request={req} onClose={() => setShowCodegen(false)} />}
     </div>
   );
 }
 
-function base64Of(s: string): string {
-  const enc = new TextEncoder();
-  let bin = '';
-  enc.encode(s).forEach((b) => { bin += String.fromCharCode(b); });
-  return btoa(bin);
-}
-function guessExt(resp: ApiResponse): string {
-  const ct = resp.headers.find((h) => h.key.toLowerCase() === 'content-type')?.value ?? '';
-  if (ct.includes('json')) return 'json';
-  if (ct.includes('xml')) return 'xml';
-  if (ct.includes('html')) return 'html';
-  if (ct.includes('image/png')) return 'png';
-  if (ct.includes('zip')) return 'zip';
-  return 'txt';
+function withSnap(r: ApiResponse, req: ApiRequest): ApiResponse {
+  return { ...r, requestSnapshot: r.requestSnapshot ?? { method: req.method, url: req.url, headers: req.headers } };
 }
 
 // ---------------------------------------------------------------------------
 function BodyEditor(props: { req: ApiRequest; patch: (p: Partial<ApiRequest>) => void }): React.ReactElement {
   const { req, patch } = props;
   const body = req.body ?? { type: 'none' };
-  const setType = (type: string): void => patch({ body: { ...body, type: type as RequestBody['type'] } });
+  const setType = (type: string): void => {
+    const next: RequestBody = { ...body, type: type as RequestBody['type'] };
+    if (['json', 'xml', 'html', 'javascript', 'text', 'graphql'].includes(type) && next.raw === undefined) next.raw = '';
+    patch({ body: next });
+  };
+  const langFor: Record<string, string> = {
+    json: 'json', xml: 'xml', html: 'html', javascript: 'javascript',
+    graphql: 'graphql', text: 'plaintext',
+  };
+  const rawType = body.type;
+  const RAW_LIKE: readonly string[] = ['json', 'xml', 'html', 'javascript', 'text', 'graphql'];
   return (
     <div>
       <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
@@ -312,23 +404,37 @@ function BodyEditor(props: { req: ApiRequest; patch: (p: Partial<ApiRequest>) =>
         ))}
       </div>
       <div style={{ marginTop: 10 }}>
-        {(body.type === 'json' || body.type === 'xml' || body.type === 'text' || body.type === 'graphql') && (
-          <CodeArea minRows={10} nowrap
-            placeholder={body.type === 'json' ? '{ "hello": "world" }' : body.type === 'graphql' ? 'query { viewer { login } }\n\n--- variables ---\n{"x": 1}' : 'Body…'}
-            value={body.raw ?? ''} onChange={(raw) => patch({ body: { ...body, raw } })} />
+        {RAW_LIKE.includes(rawType) && (
+          <CodeEditorField
+            value={body.raw ?? ''}
+            language={langFor[rawType] ?? 'plaintext'}
+            minHeight={240}
+            onChange={(raw) => patch({ body: { ...body, raw } })}
+            placeholder={rawType === 'json' ? '{ "hello": "world" }' : rawType === 'graphql' ? 'query { viewer { login } }\n\n--- variables ---\n{ }' : 'Body…'}
+          />
         )}
-        {body.type === 'graphql' && <div className="muted" style={{ marginTop: 4 }}>GraphQL: content is sent as {`{ query, variables }`} — put optional variables after a `--- variables ---` line.</div>}
-        {body.type === 'urlencoded' && <KVEditor items={body.urlencoded ?? []} onChange={(urlencoded) => patch({ body: { ...body, urlencoded } })} />}
-        {body.type === 'form-data' && <MultipartEditor items={body.formData ?? []} onChange={(formData) => patch({ body: { ...body, formData } })} />}
-        {body.type === 'binary' && (
+        {rawType === 'graphql' && (
+          <div className="muted" style={{ marginTop: 4 }}>
+            GraphQL body is POSTed as {'{ query, variables }'}. Put optional variables after a <code>--- variables ---</code> line.
+          </div>
+        )}
+        {rawType === 'urlencoded' && <KVEditor items={body.urlencoded ?? []} onChange={(urlencoded) => patch({ body: { ...body, urlencoded } })} />}
+        {rawType === 'form-data' && <MultipartEditor items={body.formData ?? []} onChange={(formData) => patch({ body: { ...body, formData } })} />}
+        {rawType === 'binary' && (
           <div className="card" style={{ maxWidth: 640 }}>
             <label className="lbl">File path (absolute)</label>
-            <input className="input mono" placeholder="/path/to/upload.bin" value={body.binaryFilePath ?? ''} onChange={(e) => patch({ body: { ...body, binaryFilePath: e.target.value } })} />
+            <div className="row">
+              <input className="input mono" placeholder="/path/to/upload.bin" value={body.binaryFilePath ?? ''} onChange={(e) => patch({ body: { ...body, binaryFilePath: e.target.value } })} />
+              <button className="btn sm" onClick={async () => {
+                const paths = await call<string[]>('dialog.openFile', { filters: [{ name: 'All files', extensions: ['*'] }] });
+                if (paths?.[0]) patch({ body: { ...body, binaryFilePath: paths[0] } });
+              }}>Browse…</button>
+            </div>
             <label className="lbl">Content-Type (blank = auto-detect)</label>
             <input className="input" style={{ maxWidth: 280 }} value={body.contentTypeOverride ?? ''} onChange={(e) => patch({ body: { ...body, contentTypeOverride: e.target.value } })} />
           </div>
         )}
-        {body.type === 'none' && <div className="muted">This request has no body.</div>}
+        {rawType === 'none' && <div className="muted">This request has no body.</div>}
       </div>
     </div>
   );
@@ -369,7 +475,7 @@ function AuthEditor(props: { req: ApiRequest; patch: (p: Partial<ApiRequest>) =>
   const { req, patch } = props;
   const auth = req.auth ?? { type: 'inherit' };
   const set = (a: AuthConfig): void => patch({ auth: a });
-  const TYPES: string[] = ['inherit', 'none', 'basic', 'bearer', 'apikey', 'digest', 'hawk', 'ntlm', 'aws-sigv4', 'oauth2', 'custom'];
+  const TYPES: string[] = ['inherit', 'none', 'basic', 'bearer', 'apikey', 'digest', 'hawk', 'ntlm', 'aws4', 'oauth1', 'oauth2', 'jwt', 'custom'];
   return (
     <div>
       <div className="row">
@@ -433,13 +539,18 @@ function AuthEditor(props: { req: ApiRequest; patch: (p: Partial<ApiRequest>) =>
             <input className="input" placeholder="s3/execute-api/…" value={auth.aws4?.service ?? ''} onChange={(e) => set({ ...auth, aws4: { region: auth.aws4?.region ?? '', accessKey: auth.aws4?.accessKey ?? '', secretKey: auth.aws4?.secretKey ?? '', service: e.target.value } })} />
           </div>
         </>)}
+        {auth.type === 'oauth1' && <div className="muted">OAuth 1.0a is applied at send time using consumer key/secret + token — configure via the OAuth page and reference with {'{{oauthToken}}'}.</div>}
         {auth.type === 'oauth2' && (
           <div>
             <label className="lbl">Access token (generate via OAuth page)</label>
             <input className="input" value={auth.oauth2?.accessToken ?? ''} onChange={(e) => set({ ...auth, oauth2: { ...auth.oauth2, grantType: auth.oauth2?.grantType ?? 'authorization_code_pkce', accessToken: e.target.value } })} />
-            <div className="muted" style={{ marginTop: 4 }}>
-              Grant config (auth URL, PKCE, client id/secret…) lives under OAuth in the sidebar; stored token is used here.
-            </div>
+            <div className="muted" style={{ marginTop: 4 }}>Grant config (auth URL, PKCE, client id/secret…) lives under OAuth in the sidebar; the stored token is used here.</div>
+          </div>
+        )}
+        {auth.type === 'jwt' && (
+          <div>
+            <label className="lbl">Signed JWT (paste or reference {'{{vault:jwt}}'})</label>
+            <CodeArea minRows={3} value={auth.bearer?.token ?? ''} onChange={(token) => set({ ...auth, type: 'jwt', bearer: { token } })} />
           </div>
         )}
         {auth.type === 'custom' && (<>
@@ -529,8 +640,8 @@ function MenuButton(props: { label: string; title?: string; actions: { label: st
       {open && (
         <span className="ctx-menu mono" style={{ position: 'absolute', right: 0, top: '100%', zIndex: 500, fontSize: 12 }}
           onMouseLeave={() => setOpen(false)} onClick={(e) => e.stopPropagation()}>
-          {props.actions.map((a) => (
-            <div key={a.label} className="ci" style={a.disabled ? { opacity: .45, pointerEvents: 'none' } : undefined}
+          {props.actions.map((a, i) => (
+            <div key={i} className="ci" style={a.disabled ? { opacity: .45, pointerEvents: 'none' } : undefined}
               onClick={() => { a.run(); setOpen(false); }}>{a.label}</div>
           ))}
         </span>
@@ -540,18 +651,58 @@ function MenuButton(props: { label: string; title?: string; actions: { label: st
 }
 
 function ResponseTopBar(props: {
-  resp: ApiResponse | null; errored: string | null; zoom: number; setZoom: (z: number) => void;
-  nowrap: boolean; setNowrap: (b: boolean) => void;
-  search: string | null; setSearch: (v: string | null) => void; activeHit: number; setActiveHit: (n: number) => void;
+  resp: ApiResponse | null; errored: string | null;
+  zoom: number; setZoom: (z: number) => void;
+  wrap: boolean; setWrap: (b: boolean) => void;
+  search: string | null; setSearch: (v: string | null) => void;
+  searchState: SearchState; setSearchState: (s: SearchState) => void;
+  activeHit: number; setActiveHit: (n: number) => void;
+  req: ApiRequest;
 }): React.ReactElement {
+  const app = useApp();
   if (props.errored && !props.resp) {
     return <div className="resp-top"><span className="badge-pill red">Error</span><span className="mono" style={{ color: 'var(--red)', fontSize: 12 }}>{props.errored}</span></div>;
   }
   const r = props.resp;
   if (!r) return <div className="resp-top"><span className="muted">Send a request to see the response here.</span></div>;
+  const rr = withSnap(r, props.req);
   const body = r.bodyText ?? '';
-  const hits = countMatches(body, props.search ?? '');
-  const disabledNoBody = body.length === 0;
+  const opts = props.searchState;
+  const hits = countMatches(body, props.search ?? '', opts);
+  const disabledNoBody = body.length === 0 && !r.bodyBase64;
+  const searchRe = useMemo(() => buildSearchRegExp(props.search ?? '', opts), [props.search, opts.caseSensitive, opts.wholeWord, opts.regex]);
+  void searchRe;
+
+  const copy = (which: 'body' | 'headers' | 'headersBody' | 'statusHeadersBody'): void => {
+    const bundles = copyBundles(rr);
+    const b = bundles[which];
+    void navigator.clipboard.writeText(b.content).then(() => {
+      app.toast('ok', `Copied ${b.label.toLowerCase()} (${fmtBytes(b.content.length)})`);
+    }).catch(() => {
+      // non-secure-context fallback (e.g. plain http remote preview)
+      const ta = document.createElement('textarea');
+      ta.value = b.content; document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); app.toast('ok', `Copied ${b.label.toLowerCase()}`); } catch { app.toast('err', 'Clipboard unavailable'); }
+      ta.remove();
+    });
+  };
+
+  const download = (which: 'body' | 'headers' | 'headersBody' | 'raw'): void => {
+    // binary bodies go through the native save dialog so bytes are preserved
+    if (which === 'body' && r.bodyBase64 && /image|pdf|zip|octet-stream|audio|video/.test((r.headers.find((h) => h.key.toLowerCase() === 'content-type')?.value) ?? '')) {
+      const ext = suggestExtension(r);
+      void call<{ path: string } | null>('dialog.saveFile', {
+        defaultName: `response-${r.status}.${ext}`,
+        filters: [{ name: 'Response body', extensions: [ext] }],
+        contentBase64: r.bodyBase64,
+      }).then((p) => p && app.toast('ok', `Saved ${p.path}`));
+      return;
+    }
+    const d = downloadBundles(rr)[which];
+    saveBlob(d.name, d.mime, d.content);
+    app.toast('ok', `Downloaded ${d.name}`);
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
       <div className="resp-top">
@@ -560,25 +711,30 @@ function ResponseTopBar(props: {
         <span className="dim mono">{fmtMs(r.timing?.totalMs ?? 0)}</span>
         <span className="dim mono">{fmtBytes(r.bodySize ?? 0)}</span>
         <span className={`badge-pill ${props.search != null ? 'green' : 'grey'}`}
-          title="Search in response body" role="button" style={{ cursor: 'pointer' }}
+          title="Search in response body (Ctrl+F)" role="button" style={{ cursor: 'pointer' }}
           onClick={() => props.setSearch(props.search == null ? '' : null)}>🔍 search</span>
         <span className="spacer" />
-        <button className="btn xs" title="Zoom out" onClick={() => props.setZoom(Math.max(.5, +(props.zoom - .1).toFixed(2)))}>−</button>
-        <button className="btn xs" title="Zoom in" onClick={() => props.setZoom(Math.min(2.5, +(props.zoom + .1).toFixed(2)))}>＋</button>
-        <button className="btn xs" title="Toggle word wrap" onClick={() => props.setNowrap(!props.nowrap)}>{props.nowrap ? 'Word wrap' : 'No wrap'}</button>
+        <button className="btn xs" title="Zoom out (Ctrl+-)" onClick={() => props.setZoom(zOut(props.zoom))}>−</button>
+        <button className="btn xs zoom-pct" title="Zoom percentage — click to reset (Ctrl+0)" onClick={() => props.setZoom(1)}>{zoomPct(props.zoom)}</button>
+        <button className="btn xs" title="Zoom in (Ctrl+=)" onClick={() => props.setZoom(zIn(props.zoom))}>＋</button>
+        <button className="btn xs" title="Reset zoom (Ctrl+0)" onClick={() => props.setZoom(1)}>Reset</button>
+        <button className={`btn xs ${props.wrap ? 'active' : ''}`} title="Toggle line wrap (persisted)"
+          onClick={() => props.setWrap(!props.wrap)}>{props.wrap ? 'Wrap: ON' : 'Wrap: OFF'}</button>
         <MenuButton label="Copy" title="Copy response to clipboard" actions={[
-          { label: 'Copy body', disabled: disabledNoBody, run: () => void navigator.clipboard.writeText(body) },
-          { label: 'Copy body as JSON', disabled: disabledNoBody, run: () => void navigator.clipboard.writeText(bodyExport(r).content) },
-          { label: 'Copy response as JSON (with headers)', run: () => void navigator.clipboard.writeText(fullResponseJson(r)) },
+          { label: 'Copy body', disabled: disabledNoBody, run: () => copy('body') },
+          { label: 'Copy headers', run: () => copy('headers') },
+          { label: 'Copy headers + body', run: () => copy('headersBody') },
+          { label: 'Copy status + headers + body', run: () => copy('statusHeadersBody') },
         ]} />
-        <MenuButton label="Save" title="Download response to disk" actions={[
-          { label: 'Save body', disabled: disabledNoBody, run: () => { const e = bodyExport(r); saveBlob(e.name, e.mime, e.content); } },
-          { label: 'Save body as JSON', disabled: disabledNoBody, run: () => { const e = bodyExport(r); saveBlob(e.name.endsWith('.json') ? e.name : e.name + '.json', 'application/json', e.content); } },
-          { label: 'Save response as JSON (with headers)', run: () => saveBlob(`response-full-${r.status}.json`, 'application/json', fullResponseJson(r)) },
+        <MenuButton label="Download" title="Download response to disk (extension chosen from Content-Type)" actions={[
+          { label: 'Download body', disabled: disabledNoBody, run: () => download('body') },
+          { label: 'Download headers (.txt)', run: () => download('headers') },
+          { label: 'Download headers + body (.txt)', run: () => download('headersBody') },
+          { label: 'Download raw response (.http)', run: () => download('raw') },
         ]} />
       </div>
       {props.search != null && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '4px 2px 2px' }}>
+        <div className="row" style={{ gap: 6, padding: '4px 2px 2px' }}>
           <input autoFocus className="sel" style={{ flex: 1, maxWidth: 340, height: 26, fontSize: 12 }} placeholder="Search response body…"
             value={props.search}
             onChange={(e) => { props.setSearch(e.target.value); props.setActiveHit(0); }}
@@ -591,6 +747,15 @@ function ResponseTopBar(props: {
             onClick={() => props.setActiveHit(hits ? (props.activeHit + hits - 1) % hits : 0)}>↑</button>
           <button className="btn xs" title="Next match (Enter)" disabled={!hits}
             onClick={() => props.setActiveHit(hits ? (props.activeHit + 1) % hits : 0)}>↓</button>
+          <label className="checkbox" style={{ fontSize: 11.5 }} title="Case sensitive">
+            <input type="checkbox" checked={!!opts.caseSensitive} onChange={(e) => { props.setSearchState({ ...opts, caseSensitive: e.target.checked }); props.setActiveHit(0); }} /> Aa
+          </label>
+          <label className="checkbox" style={{ fontSize: 11.5 }} title="Whole word">
+            <input type="checkbox" checked={!!opts.wholeWord} onChange={(e) => { props.setSearchState({ ...opts, wholeWord: e.target.checked }); props.setActiveHit(0); }} /> W
+          </label>
+          <label className="checkbox mono" style={{ fontSize: 11.5 }} title="Regular expression">
+            <input type="checkbox" checked={!!opts.regex} onChange={(e) => { props.setSearchState({ ...opts, regex: e.target.checked }); props.setActiveHit(0); }} /> .*
+          </label>
           <button className="btn xs" title="Close search (Esc)" onClick={() => props.setSearch(null)}>✕</button>
         </div>
       )}
@@ -598,10 +763,13 @@ function ResponseTopBar(props: {
   );
 }
 
-function ResponseBody(props: { resp: ApiResponse | null; errored: string | null; zoom: number; nowrap: boolean; search: string | null; activeHit: number }): React.ReactElement {
+function ResponseBody(props: {
+  resp: ApiResponse | null; errored: string | null; zoom: number; wrap: boolean;
+  search: string | null; searchState: CoreSearchOpts; activeHit: number;
+}): React.ReactElement {
   const r = props.resp;
   const search = props.search ?? '';
-  // scroll to + accent the active search hit
+  const opts = props.searchState;
   useEffect(() => {
     if (!search) return;
     const el = document.getElementById(`resp-hit-${props.activeHit}`);
@@ -611,14 +779,18 @@ function ResponseBody(props: { resp: ApiResponse | null; errored: string | null;
       return () => el.classList.remove('active');
     }
     return undefined;
-  }, [search, props.activeHit, r]);
+  }, [search, props.activeHit, r, opts.caseSensitive, opts.wholeWord, opts.regex]);
 
   if (props.errored && !r) return <div className="muted">Request could not complete: {props.errored}</div>;
   if (!r) return <div className="empty"><div className="big">📭</div>Nothing here yet.</div>;
   const ct = (r.headers.find((h) => h.key.toLowerCase() === 'content-type')?.value ?? '').toLowerCase();
-  const body = r.bodyText ?? (r.bodyBase64 ? '(base64 body — use Save ▸ Save body to download)' : '');
+  const body = r.bodyText ?? (r.bodyBase64 ? '(base64 body — use Download ▸ Download body to save)' : '');
   const style: React.CSSProperties = { zoom: props.zoom };
-  const marked = (text: string) => markSearch(escapeTextHtml(text), search);
+  const marked = (text: string): string => markSearch(escapeTextHtml(text), search, opts);
+  const isPdf = ct.includes('pdf');
+  if (isPdf && r.bodyBase64) {
+    return <div style={style}><iframe title="pdf-preview" src={`data:application/pdf;base64,${r.bodyBase64}`} style={{ width: '100%', height: '85vh', border: 0 }} /></div>;
+  }
   if (ct.includes('image/') && r.bodyBase64) {
     return <div style={style}><img src={`data:${ct.split(';')[0]};base64,${r.bodyBase64}`} alt="response body" /></div>;
   }
@@ -626,27 +798,27 @@ function ResponseBody(props: { resp: ApiResponse | null; errored: string | null;
     return (
       <div className="grid2">
         <div className="card zoomable" style={style} dangerouslySetInnerHTML={{ __html: sanitizeHtmlPreview(body.slice(0, 100_000)) }} />
-        <pre className={`resp-body ${props.nowrap ? 'nowrap' : ''}`}>{body.slice(0, 100_000)}</pre>
+        <pre className={`resp-body ${props.wrap ? 'wrap' : 'nowrap'}`}>{body.slice(0, 100_000)}</pre>
       </div>
     );
   }
   if (ct.includes('text/html') && search) {
-    return <pre className={`resp-body ${props.nowrap ? 'nowrap' : ''}`} style={style} dangerouslySetInnerHTML={{ __html: marked(body) }} />;
+    return <pre className={`resp-body ${props.wrap ? 'wrap' : 'nowrap'}`} style={style} dangerouslySetInnerHTML={{ __html: marked(body) }} />;
   }
   if (ct.includes('json') || body.trim().startsWith('{') || body.trim().startsWith('[')) {
-    return <div className="zoomable" style={style}><JsonView text={body} nowrap={props.nowrap} search={search} /></div>;
+    return <div className="zoomable" style={style}><JsonView text={body} wrap={props.wrap} search={search} searchOpts={opts} /></div>;
   }
   if (ct.includes('xml') || body.trimStart().startsWith('<')) {
-    return <pre className={`resp-body ${props.nowrap ? 'nowrap' : ''}`} style={style} dangerouslySetInnerHTML={{ __html: marked(prettyXml(body)) }} />;
+    return <pre className={`resp-body ${props.wrap ? 'wrap' : 'nowrap'}`} style={style} dangerouslySetInnerHTML={{ __html: marked(prettyXml(body)) }} />;
   }
-  return <pre className={`resp-body ${props.nowrap ? 'nowrap' : ''}`} style={style}
+  return <pre className={`resp-body ${props.wrap ? 'wrap' : 'nowrap'}`} style={style}
     dangerouslySetInnerHTML={{ __html: marked(body || '(empty body)') }} />;
 }
 
 function sanitizeHtmlPreview(html: string): string {
-  // strip scripts + event handlers for the preview pane
   return html
     .replace(/<script\b[^>]*>[\s\S]*?<\/script\s*>/gi, '')
+    .replace(/<iframe\b[^>]*>[\s\S]*?<\/iframe\s*>/gi, '')
     .replace(/\son\w+="[^"]*"/gi, '');
 }
 
@@ -687,7 +859,7 @@ function Timeline(props: { resp: ApiResponse }): React.ReactElement {
 function CookiesTab(props: { workspaceId: string }): React.ReactElement {
   const [cookies, setCookies] = useState<{ domain: string; name: string; value: string; path: string; expires?: string; httpOnly?: boolean; secure?: boolean }[]>([]);
   useEffect(() => {
-    void call<typeof cookies>('cookies.list', {}).then((c) => setCookies(Array.isArray(c) ? c : [])).catch(() => undefined);
+    void call<{ items?: typeof cookies } | typeof cookies>('cookies.list', {}).then((c) => setCookies(Array.isArray(c) ? c : (c.items ?? []))).catch(() => undefined);
   }, [props.workspaceId]);
   return (
     <table className="tbl">
@@ -767,7 +939,7 @@ function CompareResponses(props: { requestId: string; current: ApiResponse | nul
 }
 
 // ---------------------------------------------------------------------------
-function SaveToModal(props: { req: ApiRequest; onClose: () => void; onSaved: () => void }): React.ReactElement {
+function SaveToModal(props: { tab: OpenTab; req: ApiRequest; onClose: () => void; onSaved: (saved: ApiRequest) => void }): React.ReactElement {
   const s = useApp();
   const [name, setName] = useState(props.req.name || 'New request');
   const [collectionId, setCollectionId] = useState(props.req.collectionId ?? s.collections[0]?.id ?? '');
@@ -781,21 +953,21 @@ function SaveToModal(props: { req: ApiRequest; onClose: () => void; onSaved: () 
     }
     if (!cid) { s.toast('warn', 'Pick or create a collection'); return; }
     const { req } = props;
-    const { id, workspaceId, favorite, sortOrder, createdAt, updatedAt, collectionId: _c, folderId: _f, name: _n, ...rest } = req;
-    void _c; void _f; void _n; void favorite; void sortOrder; void createdAt; void updatedAt; void workspaceId;
+    const { id: _id, workspaceId: _w, favorite, sortOrder, createdAt, updatedAt, collectionId: _c, folderId: _f, name: _n, ...rest } = req;
+    void _id; void _w; void favorite; void sortOrder; void createdAt; void updatedAt; void _c; void _f; void _n;
+    let saved: ApiRequest;
     if (props.req.collectionId) {
-      await call('request.update', { id: id, patch: { ...rest, name, collectionId: cid, folderId: folderId || undefined } });
+      saved = await call<ApiRequest>('request.update', { id: req.id, patch: { ...rest, name, collectionId: cid, folderId: folderId || undefined } });
     } else {
-      await call('request.create', { ...rest, name, collectionId: cid, folderId: folderId || undefined });
+      saved = await call<ApiRequest>('request.create', { ...rest, name, collectionId: cid, folderId: folderId || undefined });
     }
-    props.onSaved();
+    await s.refreshCollections();
+    props.onSaved(saved);
   };
   return (
     <Modal title="Save request" onClose={props.onClose}
-      footer={<>
-        <button className="btn" onClick={props.onClose}>Cancel</button>
-        <button className="btn primary" onClick={() => void save()}>Save</button>
-      </>}>
+      footer={<><button className="btn" onClick={props.onClose}>Cancel</button>
+        <button className="btn primary" onClick={() => void save()}>Save</button></>}>
       <label className="lbl">Name</label>
       <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
       <label className="lbl">Collection</label>
@@ -817,9 +989,8 @@ function CurlImportModal(props: { onClose: () => void; onApply: (r: Partial<ApiR
   const [curl, setCurl] = useState('');
   const [err, setErr] = useState('');
   return (
-    <Modal title="Import cURL" onClose={props.onClose}
-      footer={<>
-        <button className="btn" onClick={props.onClose}>Cancel</button>
+    <Modal title="Import cURL" onClose={props.onClose} wide
+      footer={<><button className="btn" onClick={props.onClose}>Cancel</button>
         <button className="btn primary" onClick={() => {
           void call<{ method?: string; url?: string; headers?: KeyValue[]; body?: RequestBody }>('curl.parse', { command: curl }).then((p) => {
             if (!p || !p.url) { setErr('Could not parse — check the command'); return; }
@@ -828,9 +999,8 @@ function CurlImportModal(props: { onClose: () => void; onApply: (r: Partial<ApiR
               url: p.url ?? '', headers: p.headers ?? [], body: p.body ?? { type: 'none' },
             });
           }).catch((e) => setErr(String(e instanceof Error ? e.message : e)));
-        }}>Apply</button>
-      </>}>
-      <CodeArea minRows={8} placeholder="curl -X GET https://api.example.com -H 'X: 1'" value={curl} onChange={setCurl} />
+        }}>Apply</button></>}>
+      <MonacoEditor value={curl} onChange={setCurl} language="shell" minHeight={220} placeholder="curl -X GET https://api.example.com -H 'X: 1'" />
       {err && <div style={{ color: 'var(--red)', marginTop: 8 }}>{err}</div>}
     </Modal>
   );
@@ -851,8 +1021,10 @@ function CodegenModal(props: { request: ApiRequest; onClose: () => void }): Reac
   }, [language, variant, props.request]);
   const sel = targets.find((t) => t.language === language);
   return (
-    <Modal title="Generate code" onClose={props.onClose}
-      footer={<button className="btn" onClick={props.onClose}>Close</button>}>
+    <Modal title="Generate code" onClose={props.onClose} wide
+      footer={<><span className="spacer" />
+        <button className="btn" onClick={() => { void navigator.clipboard.writeText(code); useApp.getState().toast('ok', 'Code copied'); }}>Copy</button>
+        <button className="btn" onClick={props.onClose}>Close</button></>}>
       <div className="row">
         <select className="input sm" style={{ width: 280 }} value={language} onChange={(e) => { setLanguage(e.target.value); setVariant(''); }}>
           {targets.map((t) => <option key={t.language} value={t.language}>{t.label}</option>)}
@@ -863,10 +1035,10 @@ function CodegenModal(props: { request: ApiRequest; onClose: () => void }): Reac
             {sel.variants.map((v) => <option key={v}>{v}</option>)}
           </select>
         )}
-        <span className="spacer" />
-        <button className="btn sm" onClick={() => void navigator.clipboard.writeText(code)}>Copy</button>
       </div>
-      <pre className="resp-body" style={{ marginTop: 10, maxHeight: '55vh', overflow: 'auto' }}>{code}</pre>
+      <div style={{ marginTop: 10, height: '55vh' }}>
+        <MonacoEditor value={code} readOnly language={language === 'curl' ? 'shell' : language === 'powershell' ? 'powershell' : language === 'python' ? 'python' : language === 'go' ? 'go' : 'plaintext'} minHeight={400} />
+      </div>
     </Modal>
   );
 }

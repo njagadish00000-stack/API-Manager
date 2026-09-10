@@ -30533,7 +30533,7 @@ var require_xpath = __commonJS({
       function toString2(x) {
         return x.toString();
       }
-      var join9 = function(s, xs) {
+      var join10 = function(s, xs) {
         return xs.join(s);
       };
       var wrap = function(pref, suf, str) {
@@ -32274,7 +32274,7 @@ var require_xpath = __commonJS({
         return wrap("[", "]", predicate.toString());
       };
       PathExpr.predicatesString = function(predicates) {
-        return join9(
+        return join10(
           "",
           map(PathExpr.predicateString, predicates)
         );
@@ -33629,7 +33629,7 @@ var require_xpath = __commonJS({
           }
           return acc;
         }, {}, from);
-        var t = join9(
+        var t = join10(
           "",
           map(function(ch) {
             return ch in cMap ? cMap[ch] : ch;
@@ -47071,6 +47071,9 @@ var init_engine = __esm({
 });
 
 // src/core/scripting/pmApi.ts
+function isRegExp(v) {
+  return Object.prototype.toString.call(v) === "[object RegExp]";
+}
 function fmt(v) {
   if (typeof v === "string") return v.length > 60 ? `"${v.slice(0, 60)}\u2026"` : `"${v}"`;
   try {
@@ -47655,7 +47658,7 @@ var init_pmApi = __esm({
         return this;
       }
       toMatch(reOrStr) {
-        const re2 = reOrStr instanceof RegExp ? reOrStr : new RegExp(String(reOrStr).replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"));
+        const re2 = isRegExp(reOrStr) ? reOrStr : new RegExp(String(reOrStr).replace(/[-\/\\^$*+?.()|[\]{}]/g, "\\$&"));
         this.assert(re2.test(String(this.actual)), `to match ${re2}`);
         return this;
       }
@@ -47669,8 +47672,14 @@ var init_pmApi = __esm({
         }
         this.assert(thrown !== void 0, `to throw an error`);
         if (thrown !== void 0 && errOrMsg !== void 0) {
-          const msg = thrown instanceof Error ? thrown.message : String(thrown);
-          const ok = typeof errOrMsg === "string" ? msg.includes(errOrMsg) : errOrMsg instanceof RegExp ? errOrMsg.test(msg) : thrown instanceof errOrMsg;
+          const msg = thrown && typeof thrown === "object" && "message" in thrown ? String(thrown.message) : String(thrown);
+          const ok = typeof errOrMsg === "string" ? msg.includes(errOrMsg) : isRegExp(errOrMsg) ? errOrMsg.test(msg) : (() => {
+            try {
+              return thrown instanceof errOrMsg;
+            } catch {
+              return false;
+            }
+          })();
           this.assert(ok, `to throw matching ${String(errOrMsg)} (got "${msg}")`);
         }
         return this;
@@ -56947,10 +56956,10 @@ async function buildBody(body, _url) {
         if (field.fieldType === "file") {
           const paths = field.filePaths?.length ? field.filePaths : [field.filePath ?? field.value];
           for (const rawPath of paths) {
-            const path2 = (0, import_node_path5.resolve)(rawPath ?? "");
+            const path2 = (0, import_node_path6.resolve)(rawPath ?? "");
             let content;
             try {
-              content = (0, import_node_fs5.readFileSync)(path2);
+              content = (0, import_node_fs6.readFileSync)(path2);
             } catch (e) {
               throw new Error(`Form file "${field.key}" not found: ${path2} (${e instanceof Error ? e.message : e})`);
             }
@@ -56979,10 +56988,10 @@ ${field.value}\r
     case "binary":
     case "file": {
       if (!body.binaryFilePath) return {};
-      const path2 = (0, import_node_path5.resolve)(body.binaryFilePath);
+      const path2 = (0, import_node_path6.resolve)(body.binaryFilePath);
       let content;
       try {
-        content = (0, import_node_fs5.readFileSync)(path2);
+        content = (0, import_node_fs6.readFileSync)(path2);
       } catch (e) {
         throw new Error(`Binary file not found: ${path2} (${e instanceof Error ? e.message : e})`);
       }
@@ -57042,7 +57051,7 @@ function makeSendRequestFn(deps, opts, log, proxy, tls) {
     return { ...result.response, id: uid() };
   };
 }
-var import_node_crypto3, import_node_path5, import_node_fs5, import_mime_types, import_ajv, ajv;
+var import_node_crypto3, import_node_path6, import_node_fs6, import_mime_types, import_ajv, ajv;
 var init_sendPipeline = __esm({
   "src/services/http/sendPipeline.ts"() {
     init_ids();
@@ -57056,8 +57065,8 @@ var init_sendPipeline = __esm({
     init_signers();
     init_engine();
     init_sandbox();
-    import_node_path5 = require("node:path");
-    import_node_fs5 = require("node:fs");
+    import_node_path6 = require("node:path");
+    import_node_fs6 = require("node:fs");
     import_mime_types = __toESM(require_mime_types(), 1);
     import_ajv = __toESM(require_ajv(), 1);
     ajv = new import_ajv.default({ allErrors: true, strict: false });
@@ -98323,7 +98332,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
       }
       return isAbsolute2 ? `/${normalized}` : normalized;
     }
-    function join9(...args) {
+    function join10(...args) {
       if (args.length === 0) return ".";
       let joined;
       for (let i = 0; i < args.length; ++i) {
@@ -98721,7 +98730,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
         for (const [key, value2] of actualRefsToWrite) {
           await acquireLock(
             key,
-            async () => fs2.write(join9(gitdir, key), `${value2.trim()}
+            async () => fs2.write(join10(gitdir, key), `${value2.trim()}
 `, "utf8")
           );
         }
@@ -98745,7 +98754,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
         }
         await acquireLock(
           ref,
-          async () => fs2.write(join9(gitdir, ref), `${value2.trim()}
+          async () => fs2.write(join10(gitdir, ref), `${value2.trim()}
 `, "utf8")
         );
       }
@@ -98763,7 +98772,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
         assertWritableRef(ref);
         await acquireLock(
           ref,
-          async () => fs2.write(join9(gitdir, ref), `ref: ${value2.trim()}
+          async () => fs2.write(join10(gitdir, ref), `ref: ${value2.trim()}
 `, "utf8")
         );
       }
@@ -98790,7 +98799,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
        */
       static async deleteRefs({ fs: fs2, gitdir, refs }) {
         refs.forEach(assertWritableRef);
-        await Promise.all(refs.map((ref) => fs2.rm(join9(gitdir, ref))));
+        await Promise.all(refs.map((ref) => fs2.rm(join10(gitdir, ref))));
         let text = await acquireLock(
           "packed-refs",
           async () => fs2.read(`${gitdir}/packed-refs`, { encoding: "utf8" })
@@ -99877,7 +99886,7 @@ If you're a developer and you believe this is a bug in isomorphic-git, please fi
       format = "content",
       getExternalRefDelta
     }) {
-      let list = await fs2.readdir(join9(gitdir, "objects/pack"));
+      let list = await fs2.readdir(join10(gitdir, "objects/pack"));
       list = list.filter((x) => x.endsWith(".idx"));
       for (const filename of list) {
         const indexFile = `${gitdir}/objects/pack/${filename}`;
@@ -100734,9 +100743,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         }
         const tree = GitTree.from(object);
         for (const entry2 of tree) {
-          map.set(join9(filepath, entry2.path), entry2);
+          map.set(join10(filepath, entry2.path), entry2);
         }
-        return tree.entries().map((entry2) => join9(filepath, entry2.path));
+        return tree.entries().map((entry2) => join10(filepath, entry2.path));
       }
       async type(entry) {
         if (entry._type === false) {
@@ -100829,9 +100838,9 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         if (await entry.type() !== "tree") return null;
         const filepath = entry._fullpath;
         const { fs: fs2, dir } = this;
-        const names = await fs2.readdir(join9(dir, filepath));
+        const names = await fs2.readdir(join10(dir, filepath));
         if (names === null) return null;
-        return names.map((name2) => join9(filepath, name2));
+        return names.map((name2) => join10(filepath, name2));
       }
       async type(entry) {
         if (entry._type === false) {
@@ -101084,7 +101093,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       } else if (entries.length) {
         await Promise.all(
           entries.map((entry) => {
-            const subpath = join9(filepath, entry);
+            const subpath = join10(filepath, entry);
             return fs2.lstat(subpath).then((stat) => {
               if (!stat) return;
               return stat.isDirectory() ? rmRecursive(fs2, subpath) : fs2.rm(subpath);
@@ -101369,7 +101378,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           if (isAbsolute(submoduleGitdir)) {
             return submoduleGitdir;
           }
-          const gitdir = join9(dirname6(dotgit), submoduleGitdir);
+          const gitdir = join10(dirname6(dotgit), submoduleGitdir);
           return gitdir;
         });
       } else {
@@ -101391,7 +101400,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function abortMerge({
       fs: _fs,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       commit: commit2 = "HEAD",
       cache: cache2 = {}
     }) {
@@ -101472,17 +101481,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
        * @param {string} args.filepath - The path of the file to check.
        * @returns {Promise<boolean>} - `true` if the file is ignored, `false` otherwise.
        */
-      static async isIgnored({ fs: fs2, dir, gitdir = join9(dir, ".git"), filepath }) {
+      static async isIgnored({ fs: fs2, dir, gitdir = join10(dir, ".git"), filepath }) {
         if (basename3(filepath) === ".git") return true;
         if (filepath === ".") return false;
         let excludes = "";
-        const excludesFile = join9(gitdir, "info", "exclude");
+        const excludesFile = join10(gitdir, "info", "exclude");
         if (await fs2.exists(excludesFile)) {
           excludes = await fs2.read(excludesFile, "utf8");
         }
         const pairs = [
           {
-            gitignore: join9(dir, ".gitignore"),
+            gitignore: join10(dir, ".gitignore"),
             filepath
           }
         ];
@@ -101491,7 +101500,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           const folder = pieces.slice(0, i).join("/");
           const file = pieces.slice(i).join("/");
           pairs.push({
-            gitignore: join9(dir, folder, ".gitignore"),
+            gitignore: join10(dir, folder, ".gitignore"),
             filepath: file
           });
         }
@@ -101578,7 +101587,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function add({
       fs: _fs,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       filepath,
       cache: cache2 = {},
       force = false,
@@ -101642,17 +101651,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           });
           if (ignored) return;
         }
-        const stats = await fs2.lstat(join9(dir, currentFilepath));
+        const stats = await fs2.lstat(join10(dir, currentFilepath));
         if (!stats) throw new NotFoundError(currentFilepath);
         if (stats.isDirectory()) {
-          const children = await fs2.readdir(join9(dir, currentFilepath));
+          const children = await fs2.readdir(join10(dir, currentFilepath));
           if (parallel) {
             const promises2 = children.map(
               (child) => addToIndex({
                 dir,
                 gitdir,
                 fs: fs2,
-                filepath: [join9(currentFilepath, child)],
+                filepath: [join10(currentFilepath, child)],
                 index: index4,
                 force,
                 parallel,
@@ -101666,7 +101675,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
                 dir,
                 gitdir,
                 fs: fs2,
-                filepath: [join9(currentFilepath, child)],
+                filepath: [join10(currentFilepath, child)],
                 index: index4,
                 force,
                 parallel,
@@ -101675,7 +101684,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             }
           }
         } else {
-          const object = stats.isSymbolicLink() ? await fs2.readlink(join9(dir, currentFilepath)).then(posixifyPathBuffer) : await fs2.read(join9(dir, currentFilepath), { autocrlf });
+          const object = stats.isSymbolicLink() ? await fs2.readlink(join10(dir, currentFilepath)).then(posixifyPathBuffer) : await fs2.read(join10(dir, currentFilepath), { autocrlf });
           if (object === null) throw new NotFoundError(currentFilepath);
           const oid = await _writeObject({ fs: fs2, gitdir, type: "blob", object });
           index4.insert({ filepath: currentFilepath, stats, oid });
@@ -102109,7 +102118,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       fs: _fs,
       onSign,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       ref = "refs/notes/commits",
       oid,
       note,
@@ -102185,7 +102194,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function addRemote({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       remote,
       url: url2,
       force = false
@@ -102255,7 +102264,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       fs: _fs,
       onSign,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       ref,
       tagger: _tagger,
       message = ref,
@@ -102336,7 +102345,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function branch({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       ref,
       object,
       checkout: checkout2 = false,
@@ -103000,7 +103009,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       onProgress,
       onPostCheckout,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       remote = "origin",
       ref: _ref,
       filepaths,
@@ -103081,7 +103090,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       fs: fs2,
       cache: cache2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       index: index4,
       ourOid,
       baseOid,
@@ -103351,7 +103360,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       workdir: WORKDIR
     };
     async function checkAndWriteBlob(fs2, gitdir, dir, filepath, oid = null) {
-      const currentFilepath = join9(dir, filepath);
+      const currentFilepath = join10(dir, filepath);
       const stats = await fs2.lstat(currentFilepath);
       if (!stats) throw new NotFoundError(currentFilepath);
       if (stats.isDirectory())
@@ -103520,7 +103529,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
                 stageUpdated.push({
                   filepath,
                   oid,
-                  stats: await fs2.lstat(join9(dir, filepath))
+                  stats: await fs2.lstat(join10(dir, filepath))
                 });
               return {
                 method: "write",
@@ -103533,7 +103542,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       });
       await acquireLock(gitdir, async () => {
         for (const op of ops) {
-          const currentFilepath = join9(dir, op.filepath);
+          const currentFilepath = join10(dir, op.filepath);
           switch (op.method) {
             case "rmdir":
               await fs2.rmdir(currentFilepath);
@@ -103667,7 +103676,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function cherryPick({
       fs: _fs,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       oid,
       cache: cache2 = {},
       committer,
@@ -104166,7 +104175,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
        * @returns {Promise<Set<string>>} - A set of shallow object IDs.
        */
       static async read({ fs: fs2, gitdir }) {
-        const filepath = join9(gitdir, "shallow");
+        const filepath = join10(gitdir, "shallow");
         const oids = /* @__PURE__ */ new Set();
         await acquireLock(filepath, async function() {
           const text = await fs2.read(filepath, { encoding: "utf8" });
@@ -104187,7 +104196,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
        * @returns {Promise<void>}
        */
       static async write({ fs: fs2, gitdir, oids }) {
-        const filepath = join9(gitdir, "shallow");
+        const filepath = join10(gitdir, "shallow");
         if (oids.size > 0) {
           const text = [...oids].join("\n") + "\n";
           await acquireLock(filepath, async function() {
@@ -104213,7 +104222,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       oid,
       getExternalRefDelta
     }) {
-      let list = await fs2.readdir(join9(gitdir, "objects/pack"));
+      let list = await fs2.readdir(join10(gitdir, "objects/pack"));
       list = list.filter((x) => x.endsWith(".idx"));
       for (const filename of list) {
         const indexFile = `${gitdir}/objects/pack/${filename}`;
@@ -104804,7 +104813,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
       if (packfileSha !== "" && !emptyPackfile(packfile)) {
         res.packfile = `objects/pack/pack-${packfileSha}.pack`;
-        const fullpath = join9(gitdir, res.packfile);
+        const fullpath = join10(gitdir, res.packfile);
         await fs2.write(fullpath, packfile);
         const getExternalRefDelta = (oid2) => _readObject({ fs: fs2, cache: cache2, gitdir, oid: oid2 });
         const idx = await GitPackIndex.fromPack({
@@ -104820,7 +104829,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       fs: fs2,
       bare = false,
       dir,
-      gitdir = bare ? dir : join9(dir, ".git"),
+      gitdir = bare ? dir : join10(dir, ".git"),
       defaultBranch = "master"
     }) {
       if (await fs2.exists(gitdir + "/config")) return;
@@ -104934,7 +104943,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       onAuthFailure,
       onPostCheckout,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       url: url2,
       corsProxy = void 0,
       ref = void 0,
@@ -104997,7 +105006,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       fs: _fs,
       onSign,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       message,
       author,
       committer,
@@ -105046,7 +105055,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function currentBranch({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       fullname = false,
       test = false
     }) {
@@ -105087,7 +105096,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function deleteBranch({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       ref
     }) {
       try {
@@ -105105,7 +105114,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function deleteRef({ fs: fs2, dir, gitdir = join9(dir, ".git"), ref }) {
+    async function deleteRef({ fs: fs2, dir, gitdir = join10(dir, ".git"), ref }) {
       try {
         assertParameter("fs", fs2);
         assertParameter("ref", ref);
@@ -105125,7 +105134,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function deleteRemote({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       remote
     }) {
       try {
@@ -105147,7 +105156,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       ref = ref.startsWith("refs/tags/") ? ref : `refs/tags/${ref}`;
       await GitRefManager.deleteRef({ fs: fs2, gitdir, ref });
     }
-    async function deleteTag({ fs: fs2, dir, gitdir = join9(dir, ".git"), ref }) {
+    async function deleteTag({ fs: fs2, dir, gitdir = join10(dir, ".git"), ref }) {
       try {
         assertParameter("fs", fs2);
         assertParameter("ref", ref);
@@ -105176,7 +105185,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       getExternalRefDelta
     }) {
       const results = [];
-      let list = await fs2.readdir(join9(gitdir, "objects/pack"));
+      let list = await fs2.readdir(join10(gitdir, "objects/pack"));
       list = list.filter((x) => x.endsWith(".idx"));
       for (const filename of list) {
         const indexFile = `${gitdir}/objects/pack/${filename}`;
@@ -105219,7 +105228,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function expandOid({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       oid,
       cache: cache2 = {}
     }) {
@@ -105240,7 +105249,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function expandRef({ fs: fs2, dir, gitdir = join9(dir, ".git"), ref }) {
+    async function expandRef({ fs: fs2, dir, gitdir = join10(dir, ".git"), ref }) {
       try {
         assertParameter("fs", fs2);
         assertParameter("gitdir", gitdir);
@@ -105531,7 +105540,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       onAuthSuccess,
       onAuthFailure,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       ref,
       url: url2,
       remote,
@@ -105589,7 +105598,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       onAuthSuccess,
       onAuthFailure,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       ref,
       remote,
       remoteRef,
@@ -105645,7 +105654,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function findMergeBase({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       oids,
       cache: cache2 = {}
     }) {
@@ -105667,7 +105676,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       }
     }
     async function _findRoot({ fs: fs2, filepath }) {
-      if (await fs2.exists(join9(filepath, ".git"))) {
+      if (await fs2.exists(join10(filepath, ".git"))) {
         return filepath;
       } else {
         const parent = dirname6(filepath);
@@ -105687,7 +105696,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function getConfig({ fs: fs2, dir, gitdir = join9(dir, ".git"), path: path2 }) {
+    async function getConfig({ fs: fs2, dir, gitdir = join10(dir, ".git"), path: path2 }) {
       try {
         assertParameter("fs", fs2);
         assertParameter("gitdir", gitdir);
@@ -105711,7 +105720,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function getConfigAll({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       path: path2
     }) {
       try {
@@ -105903,7 +105912,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       filepath
     }) {
       try {
-        filepath = join9(dir, filepath);
+        filepath = join10(dir, filepath);
         const pack = await fs2.read(filepath);
         const getExternalRefDelta = (oid) => _readObject({ fs: fs2, cache: cache2, gitdir, oid });
         const idx = await GitPackIndex.fromPack({
@@ -105924,7 +105933,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       fs: fs2,
       onProgress,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       filepath,
       cache: cache2 = {}
     }) {
@@ -105952,7 +105961,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       fs: fs2,
       bare = false,
       dir,
-      gitdir = bare ? dir : join9(dir, ".git"),
+      gitdir = bare ? dir : join10(dir, ".git"),
       defaultBranch = "master"
     }) {
       try {
@@ -106026,7 +106035,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function isDescendent({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       oid,
       ancestor,
       depth = -1,
@@ -106055,7 +106064,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function isIgnored({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       filepath
     }) {
       try {
@@ -106079,7 +106088,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function listBranches({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       remote
     }) {
       try {
@@ -106136,17 +106145,17 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             gitdir,
             oid: entry.oid,
             filenames,
-            prefix: join9(prefix, entry.path)
+            prefix: join10(prefix, entry.path)
           });
         } else {
-          filenames.push(join9(prefix, entry.path));
+          filenames.push(join10(prefix, entry.path));
         }
       }
     }
     async function listFiles({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       ref,
       cache: cache2 = {}
     }) {
@@ -106190,7 +106199,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function listNotes({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       ref = "refs/notes/commits",
       cache: cache2 = {}
     }) {
@@ -106214,7 +106223,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function listRefs({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       filepath
     }) {
       try {
@@ -106239,7 +106248,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       );
       return remotes;
     }
-    async function listRemotes({ fs: fs2, dir, gitdir = join9(dir, ".git") }) {
+    async function listRemotes({ fs: fs2, dir, gitdir = join10(dir, ".git") }) {
       try {
         assertParameter("fs", fs2);
         assertParameter("gitdir", gitdir);
@@ -106338,7 +106347,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function listTags({ fs: fs2, dir, gitdir = join9(dir, ".git") }) {
+    async function listTags({ fs: fs2, dir, gitdir = join10(dir, ".git") }) {
       try {
         assertParameter("fs", fs2);
         assertParameter("gitdir", gitdir);
@@ -106391,7 +106400,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       const walks = tree.entries().map(function(entry) {
         let result;
         if (entry.oid === fileId) {
-          result = join9(parentPath, entry.path);
+          result = join10(parentPath, entry.path);
           filepaths.push(result);
         } else if (entry.type === "tree") {
           result = _readObject({
@@ -106408,7 +106417,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
               fileId,
               oid,
               filepaths,
-              parentPath: join9(parentPath, entry.path)
+              parentPath: join10(parentPath, entry.path)
             });
           });
         }
@@ -106583,7 +106592,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function log({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       filepath,
       ref = "HEAD",
       depth,
@@ -106621,7 +106630,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       fs: _fs,
       onSign,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       ours,
       theirs,
       fastForward: fastForward2 = true,
@@ -106698,7 +106707,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       fs: fs2,
       cache: cache2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       oids
     }) {
       const hash = new Hash();
@@ -106741,7 +106750,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       const packfileSha = packfile.slice(-20).toString("hex");
       const filename = `pack-${packfileSha}.pack`;
       if (write) {
-        await fs2.write(join9(gitdir, `objects/pack/${filename}`), packfile);
+        await fs2.write(join10(gitdir, `objects/pack/${filename}`), packfile);
         return { filename };
       }
       return {
@@ -106752,7 +106761,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function packObjects({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       oids,
       write = false,
       cache: cache2 = {}
@@ -106784,7 +106793,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       onAuthSuccess,
       onAuthFailure,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       ref,
       url: url2,
       remote,
@@ -106854,7 +106863,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       fs: fs2,
       cache: cache2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       start,
       finish
     }) {
@@ -106902,7 +106911,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       fs: fs2,
       cache: cache2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       oids
     }) {
       const visited = /* @__PURE__ */ new Set();
@@ -107197,7 +107206,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       onAuthFailure,
       onPrePush,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       ref,
       remoteRef,
       remote = "origin",
@@ -107271,7 +107280,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function readBlob({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       oid,
       filepath,
       cache: cache2 = {}
@@ -107297,7 +107306,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function readCommit({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       oid,
       cache: cache2 = {}
     }) {
@@ -107338,7 +107347,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function readNote({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       ref = "refs/notes/commits",
       oid,
       cache: cache2 = {}
@@ -107365,7 +107374,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function readObject({
       fs: _fs,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       oid,
       format = "parsed",
       filepath = void 0,
@@ -107454,7 +107463,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function readTag({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       oid,
       cache: cache2 = {}
     }) {
@@ -107478,7 +107487,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function readTree({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       oid,
       filepath = void 0,
       cache: cache2 = {}
@@ -107504,7 +107513,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function remove({
       fs: _fs,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       filepath,
       cache: cache2 = {}
     }) {
@@ -107577,7 +107586,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       fs: _fs,
       onSign,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       ref = "refs/notes/commits",
       oid,
       author: _author,
@@ -107665,7 +107674,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function renameBranch({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       ref,
       oldref,
       checkout: checkout2 = false
@@ -107695,7 +107704,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function resetIndex({
       fs: _fs,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       filepath,
       ref,
       cache: cache2 = {}
@@ -107742,7 +107751,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           gid: 0,
           size: 0
         };
-        const object = dir && await fs2.read(join9(dir, filepath));
+        const object = dir && await fs2.read(join10(dir, filepath));
         if (object) {
           workdirOid = await hashObject$1({
             gitdir: updatedGitdir,
@@ -107750,7 +107759,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             object
           });
           if (oid === workdirOid) {
-            stats = await fs2.lstat(join9(dir, filepath));
+            stats = await fs2.lstat(join10(dir, filepath));
           }
         }
         await GitIndexManager.acquire(
@@ -107770,7 +107779,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function resolveRef2({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       ref,
       depth
     }) {
@@ -107795,7 +107804,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function setConfig({
       fs: _fs,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       path: path2,
       value: value2,
       append = false
@@ -107863,7 +107872,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
        * @param {string} args.dir - The working directory.
        * @param {string}[args.gitdir=join(dir, '.git')] - [required] The [git directory](dir-vs-gitdir.md) path
        */
-      constructor({ fs: fs2, dir, gitdir = join9(dir, ".git") }) {
+      constructor({ fs: fs2, dir, gitdir = join10(dir, ".git") }) {
         Object.assign(this, {
           fs: fs2,
           dir,
@@ -107893,7 +107902,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
        * @returns {string} - The file path for the stash reference.
        */
       get refStashPath() {
-        return join9(this.gitdir, _GitStashManager.refStash);
+        return join10(this.gitdir, _GitStashManager.refStash);
       }
       /**
        * Gets the file path for the stash reflogs.
@@ -107901,7 +107910,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
        * @returns {string} - The file path for the stash reflogs.
        */
       get refLogsStashPath() {
-        return join9(this.gitdir, _GitStashManager.refLogsStash);
+        return join10(this.gitdir, _GitStashManager.refLogsStash);
       }
       /**
        * Retrieves the author information for the stash.
@@ -108207,7 +108216,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function stash({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       op = "push",
       message = "",
       refIdx = 0
@@ -108230,7 +108239,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         const _fs = new FileSystem(fs2);
         const updatedGitdir = await discoverGitdir({ fsp: _fs, dotgit: gitdir });
         const folders = ["refs", "logs", "logs/refs"];
-        folders.map((f) => join9(updatedGitdir, f)).forEach(async (folder) => {
+        folders.map((f) => join10(updatedGitdir, f)).forEach(async (folder) => {
           if (!await _fs.exists(folder)) {
             await _fs.mkdir(folder);
           }
@@ -108260,7 +108269,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function status({
       fs: _fs,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       filepath,
       cache: cache2 = {},
       refresh = true
@@ -108299,7 +108308,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             return "ignored";
           }
         }
-        const stats = await fs2.lstat(join9(dir, filepath));
+        const stats = await fs2.lstat(join10(dir, filepath));
         const H = treeOid !== null;
         const I = indexEntry !== null;
         const W = stats !== null;
@@ -108309,7 +108318,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
           } else {
             const config = await GitConfigManager.get({ fs: fs2, gitdir: updatedGitdir });
             const autocrlf = await config.get("core.autocrlf");
-            const object = await fs2.read(join9(dir, filepath), { autocrlf });
+            const object = await fs2.read(join10(dir, filepath), { autocrlf });
             const workdirOid = await hashObject$1({
               gitdir: updatedGitdir,
               type: "blob",
@@ -108400,7 +108409,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function statusMatrix({
       fs: _fs,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       ref = "HEAD",
       filepaths = ["."],
       filter,
@@ -108473,7 +108482,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function tag({
       fs: _fs,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       ref,
       object,
       force = false
@@ -108505,7 +108514,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function updateIndex$1({
       fs: _fs,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       cache: cache2 = {},
       filepath,
       oid,
@@ -108525,7 +108534,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             { fs: fs2, gitdir: updatedGitdir, cache: cache2 },
             async function(index4) {
               if (!force) {
-                const fileStats2 = await fs2.lstat(join9(dir, filepath));
+                const fileStats2 = await fs2.lstat(join10(dir, filepath));
                 if (fileStats2) {
                   if (fileStats2.isDirectory()) {
                     throw new InvalidFilepathError("directory");
@@ -108543,7 +108552,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         }
         let fileStats;
         if (!oid) {
-          fileStats = await fs2.lstat(join9(dir, filepath));
+          fileStats = await fs2.lstat(join10(dir, filepath));
           if (!fileStats) {
             throw new NotFoundError(
               `file at "${filepath}" on disk and "remove" not set`
@@ -108564,7 +108573,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
             let stats;
             if (!oid) {
               stats = fileStats;
-              const object = stats.isSymbolicLink() ? await fs2.readlink(join9(dir, filepath)) : await fs2.read(join9(dir, filepath));
+              const object = stats.isSymbolicLink() ? await fs2.readlink(join10(dir, filepath)) : await fs2.read(join10(dir, filepath));
               oid = await _writeObject({
                 fs: fs2,
                 gitdir: updatedGitdir,
@@ -108608,7 +108617,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function walk2({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       trees,
       map,
       reduce,
@@ -108636,7 +108645,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function writeBlob({ fs: fs2, dir, gitdir = join9(dir, ".git"), blob }) {
+    async function writeBlob({ fs: fs2, dir, gitdir = join10(dir, ".git"), blob }) {
       try {
         assertParameter("fs", fs2);
         assertParameter("gitdir", gitdir);
@@ -108658,7 +108667,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function writeCommit({
       fs: fs2,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       commit: commit2
     }) {
       try {
@@ -108680,7 +108689,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function writeObject({
       fs: _fs,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       type,
       object,
       format = "parsed",
@@ -108726,7 +108735,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
     async function writeRef({
       fs: _fs,
       dir,
-      gitdir = join9(dir, ".git"),
+      gitdir = join10(dir, ".git"),
       ref,
       value: value2,
       force = false,
@@ -108781,7 +108790,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
       });
       return oid;
     }
-    async function writeTag({ fs: fs2, dir, gitdir = join9(dir, ".git"), tag: tag2 }) {
+    async function writeTag({ fs: fs2, dir, gitdir = join10(dir, ".git"), tag: tag2 }) {
       try {
         assertParameter("fs", fs2);
         assertParameter("gitdir", gitdir);
@@ -108798,7 +108807,7 @@ ${obj.gpgsig ? obj.gpgsig : ""}`;
         throw err;
       }
     }
-    async function writeTree({ fs: fs2, dir, gitdir = join9(dir, ".git"), tree }) {
+    async function writeTree({ fs: fs2, dir, gitdir = join10(dir, ".git"), tree }) {
       try {
         assertParameter("fs", fs2);
         assertParameter("gitdir", gitdir);
@@ -115132,7 +115141,7 @@ var require_utils8 = __commonJS({
     module2.exports = Utils;
     Utils.prototype.makeDir = function(folder) {
       const self2 = this;
-      function mkdirSync9(fpath) {
+      function mkdirSync10(fpath) {
         let resolvedPath = fpath.split(self2.sep)[0];
         fpath.split(self2.sep).forEach(function(name2) {
           if (!name2 || name2.substr(-1, 1) === ":") return;
@@ -115150,7 +115159,7 @@ var require_utils8 = __commonJS({
           if (stat && stat.isFile()) throw Errors.FILE_IN_THE_WAY(`"${resolvedPath}"`);
         });
       }
-      mkdirSync9(folder);
+      mkdirSync10(folder);
     };
     Utils.prototype.writeFileTo = function(path2, content, overwrite, attr) {
       const self2 = this;
@@ -116782,7 +116791,7 @@ var require_adm_zip = __commonJS({
         }
       }
       const _zip = new ZipFile(inBuffer, opts);
-      const { canonical, sanitize: sanitize2, zipnamefix } = Utils;
+      const { canonical, sanitize: sanitize3, zipnamefix } = Utils;
       function getEntry(entry) {
         if (entry && _zip) {
           var item;
@@ -116795,8 +116804,8 @@ var require_adm_zip = __commonJS({
         return null;
       }
       function fixPath(zipPath) {
-        const { join: join9, normalize: normalize2, sep } = pth.posix;
-        return join9(pth.isAbsolute(zipPath) ? "/" : ".", normalize2(sep + zipPath.split("\\").join(sep) + sep));
+        const { join: join10, normalize: normalize2, sep } = pth.posix;
+        return join10(pth.isAbsolute(zipPath) ? "/" : ".", normalize2(sep + zipPath.split("\\").join(sep) + sep));
       }
       function filenameFilter(filterfn) {
         if (filterfn instanceof RegExp) {
@@ -117285,7 +117294,7 @@ var require_adm_zip = __commonJS({
             throw Utils.Errors.NO_ENTRY();
           }
           var entryName = canonical(item.entryName);
-          var target = sanitize2(targetPath, outFileName && !item.isDirectory ? canonical(outFileName) : maintainEntryPath ? entryName : pth.basename(entryName));
+          var target = sanitize3(targetPath, outFileName && !item.isDirectory ? canonical(outFileName) : maintainEntryPath ? entryName : pth.basename(entryName));
           if (item.isDirectory) {
             var children = _zip.getEntryChildren(item);
             children.forEach(function(child) {
@@ -117295,7 +117304,7 @@ var require_adm_zip = __commonJS({
                 throw Utils.Errors.CANT_EXTRACT_FILE();
               }
               var name2 = canonical(child.entryName);
-              var childName = sanitize2(targetPath, maintainEntryPath ? name2 : pth.basename(name2));
+              var childName = sanitize3(targetPath, maintainEntryPath ? name2 : pth.basename(name2));
               const fileAttr2 = keepOriginalPermission ? child.header.fileAttr : void 0;
               filetools.writeFileTo(childName, content2, overwrite, fileAttr2);
             });
@@ -117349,7 +117358,7 @@ var require_adm_zip = __commonJS({
           overwrite = get_Bool(false, overwrite);
           if (!_zip) throw Utils.Errors.NO_ZIP();
           _zip.entries.forEach(function(entry) {
-            var entryName = sanitize2(targetPath, canonical(entry.entryName));
+            var entryName = sanitize3(targetPath, canonical(entry.entryName));
             if (entry.isDirectory) {
               filetools.makeDir(entryName);
               return;
@@ -117397,7 +117406,7 @@ var require_adm_zip = __commonJS({
             return;
           }
           targetPath = pth.resolve(targetPath);
-          const getPath = (entry) => sanitize2(targetPath, pth.normalize(canonical(entry.entryName)));
+          const getPath = (entry) => sanitize3(targetPath, pth.normalize(canonical(entry.entryName)));
           const getError = (msg, file) => new Error(msg + ': "' + file + '"');
           const dirEntries = [];
           const fileEntries = [];
@@ -117425,7 +117434,7 @@ var require_adm_zip = __commonJS({
                 next(err);
               } else {
                 const entryName = pth.normalize(canonical(entry.entryName));
-                const filePath = sanitize2(targetPath, entryName);
+                const filePath = sanitize3(targetPath, entryName);
                 entry.getDataAsync(function(content, err_1) {
                   if (err_1) {
                     next(err_1);
@@ -125272,7 +125281,8 @@ function postmanExamples(item, req) {
   return out;
 }
 function postmanVar(v) {
-  return { id: uid(), key: v.key ?? "", value: v.value ?? "", initialValue: v.value, type: v.type === "secret" ? "secret" : "default", enabled: !v.disabled, description: v.description };
+  const enabled = v.enabled === false ? false : !v.disabled;
+  return { id: uid(), key: v.key ?? "", value: v.value ?? "", initialValue: v.value, type: v.type === "secret" ? "secret" : "default", enabled, description: v.description };
 }
 function detectSecretsInCollection(parsed, out) {
   const text = JSON.stringify(parsed.info ?? {}) + JSON.stringify(parsed.variable ?? []);
@@ -129895,7 +129905,9 @@ var init_diffEngine = __esm({
 // src/core/curl/curlGenerator.ts
 var curlGenerator_exports = {};
 __export(curlGenerator_exports, {
-  generateCurl: () => generateCurl
+  generateCurl: () => generateCurl,
+  generateCurlCmd: () => generateCurlCmd,
+  generateCurlPowerShell: () => generateCurlPowerShell
 });
 function shq(s) {
   return `'${s.replace(/'/g, `'\\''`)}'`;
@@ -129994,6 +130006,95 @@ function tryParse2(t) {
     return void 0;
   }
 }
+function cmdQuote(s) {
+  return `"${s.replace(/"/g, '""').replace(/%/g, "%%")}"`;
+}
+function psQuote(s) {
+  return `'${s.replace(/'/g, "''")}'`;
+}
+function collectCurlTokens(opts) {
+  const { request: request8 } = opts;
+  const url2 = opts.finalUrl ?? buildUrl(request8.url, request8.queryParams ?? []);
+  const headers = opts.finalHeaders ?? (request8.headers ?? []).filter((h) => h.enabled);
+  const body = request8.body ?? { type: "none" };
+  let inlineBody;
+  let binaryFile;
+  const formFields = [];
+  const flags = [];
+  switch (body.type) {
+    case "json":
+    case "xml":
+    case "html":
+    case "javascript":
+    case "text":
+      if (body.raw !== void 0 && body.raw !== "") inlineBody = body.raw;
+      break;
+    case "graphql":
+      headers.push({ id: "gql-ct", key: "Content-Type", value: "application/json", enabled: true });
+      inlineBody = JSON.stringify({ query: body.graphql?.query ?? "", variables: tryParse2(body.graphql?.variables ?? "") ?? void 0 });
+      break;
+    case "urlencoded": {
+      const data = (body.urlencoded ?? []).filter((p) => p.enabled && p.key).map((p) => `${encodeURIComponent(p.key)}=${encodeURIComponent(p.value)}`).join("&");
+      if (data) inlineBody = data;
+      break;
+    }
+    case "form-data":
+      for (const f of body.formData ?? []) {
+        if (!f.enabled || !f.key) continue;
+        if (f.fieldType === "file" && (f.filePath || f.value)) formFields.push(`${f.key}=@${f.filePath ?? f.value}`);
+        else formFields.push(`${f.key}=${f.value}`);
+      }
+      break;
+    case "binary":
+    case "file":
+      if (body.binaryFilePath) binaryFile = body.binaryFilePath;
+      break;
+    default:
+      break;
+  }
+  const s = request8.settings;
+  if (s) {
+    if (s.followRedirects) flags.push("-L");
+    if (s.verifyTls === false) flags.push("-k");
+    if (s.timeoutMs && s.timeoutMs !== 3e4) flags.push(`-m ${Math.ceil(s.timeoutMs / 1e3)}`);
+  }
+  if (request8.protocol === "soap" && request8.protocolData?.soap?.action) {
+    headers.push({ id: "soap-action", key: "SOAPAction", value: request8.protocolData.soap.action, enabled: true });
+  }
+  return { method: request8.method.toUpperCase(), url: url2, headers, body: inlineBody, binaryFile, formFields, flags };
+}
+function generateCurlCmd(opts) {
+  const t = collectCurlTokens(opts);
+  const sep = " ^\n  ";
+  const parts2 = [`curl -X ${cmdQuote(t.method)} ${cmdQuote(t.url)}`];
+  if (opts.request.auth?.type === "basic" && opts.request.auth.basic) {
+    parts2.push(`-u ${cmdQuote(`${opts.request.auth.basic.username}:${opts.request.auth.basic.password}`)}`);
+  } else if (opts.request.auth?.type === "bearer" && opts.request.auth.bearer?.token) {
+    t.headers.push({ id: "auth", key: "Authorization", value: `${opts.request.auth.bearer.prefix ?? "Bearer"} ${opts.request.auth.bearer.token}`, enabled: true });
+  }
+  for (const h of t.headers) if (h.key) parts2.push(`-H ${cmdQuote(`${h.key}: ${h.value}`)}`);
+  for (const f of t.formFields) parts2.push(`-F ${cmdQuote(f)}`);
+  if (t.body !== void 0) parts2.push(`--data-raw ${cmdQuote(t.body)}`);
+  if (t.binaryFile) parts2.push(`--data-binary ${cmdQuote("@" + t.binaryFile)}`);
+  for (const f of t.flags) parts2.push(f);
+  return parts2.join(sep);
+}
+function generateCurlPowerShell(opts) {
+  const t = collectCurlTokens(opts);
+  const sep = " `\n  ";
+  const parts2 = [`curl.exe -X ${psQuote(t.method)} ${psQuote(t.url)}`];
+  if (opts.request.auth?.type === "basic" && opts.request.auth.basic) {
+    parts2.push(`-u ${psQuote(`${opts.request.auth.basic.username}:${opts.request.auth.basic.password}`)}`);
+  } else if (opts.request.auth?.type === "bearer" && opts.request.auth.bearer?.token) {
+    t.headers.push({ id: "auth", key: "Authorization", value: `${opts.request.auth.bearer.prefix ?? "Bearer"} ${opts.request.auth.bearer.token}`, enabled: true });
+  }
+  for (const h of t.headers) if (h.key) parts2.push(`-H ${psQuote(`${h.key}: ${h.value}`)}`);
+  for (const f of t.formFields) parts2.push(`-F ${psQuote(f)}`);
+  if (t.body !== void 0) parts2.push(`--data-raw ${psQuote(t.body)}`);
+  if (t.binaryFile) parts2.push(`--data-binary ${psQuote("@" + t.binaryFile)}`);
+  for (const f of t.flags) parts2.push(f);
+  return parts2.join(sep);
+}
 var init_curlGenerator = __esm({
   "src/core/curl/curlGenerator.ts"() {
     init_urlBuilder();
@@ -130085,7 +130186,11 @@ function headersCommentOutFormDataBoundary(p) {
   return p.headers.filter((h) => !(p.formFields && h.key.toLowerCase() === "content-type"));
 }
 function generateCode(request8, language, variant, prepared) {
-  if (language === "curl") return generateCurl({ request: request8 });
+  if (language === "curl") {
+    if (variant === "cmd") return generateCurlCmd({ request: request8 });
+    if (variant === "powershell") return generateCurlPowerShell({ request: request8 });
+    return generateCurl({ request: request8 });
+  }
   const p = prepared ?? prepare(request8);
   const v = variant ?? CODEGEN_TARGETS.find((t) => t.language === language)?.variants[0].id ?? "";
   const headers = headersCommentOutFormDataBoundary(p);
@@ -130252,7 +130357,7 @@ System.out.println(response);
     @${p.method}("${new URLsafe(p.url).path}")
     Call<ResponseBody> run(${p.bodyText && !p.bodyIsBinary ? `
         @Body RequestBody body,` : ""}${headers.length ? headers.map((h) => `
-        @Header(${q.str(h.key)}) String ${sanitize(h.key)}`).join(",") : ""}
+        @Header(${q.str(h.key)}) String ${sanitize2(h.key)}`).join(",") : ""}
     );
 }
 
@@ -130577,7 +130682,7 @@ ${headers.map((h) => `[request setValue:@${q.str(h.value)} forHTTPHeaderField:@$
 function pascal(s) {
   return s.charAt(0).toUpperCase() + s.slice(1).toLowerCase();
 }
-function sanitize(s) {
+function sanitize2(s) {
   return s.replace(/[^A-Za-z0-9]/g, "_");
 }
 var CODEGEN_TARGETS, q, URLsafe;
@@ -130586,7 +130691,11 @@ var init_codegen = __esm({
     init_urlBuilder();
     init_curlGenerator();
     CODEGEN_TARGETS = [
-      { language: "curl", label: "cURL", variants: [{ id: "curl", label: "cURL" }] },
+      { language: "curl", label: "cURL", variants: [
+        { id: "bash", label: "Linux / macOS (bash)" },
+        { id: "cmd", label: "Windows CMD" },
+        { id: "powershell", label: "PowerShell" }
+      ] },
       { language: "python", label: "Python", variants: [{ id: "requests", label: "requests" }, { id: "httpx", label: "httpx" }] },
       { language: "java", label: "Java", variants: [{ id: "okhttp", label: "OkHttp" }, { id: "httpclient", label: "Java 11 HttpClient" }, { id: "webclient", label: "Spring WebClient" }, { id: "retrofit", label: "Retrofit" }] },
       { language: "javascript", label: "JavaScript", variants: [{ id: "fetch", label: "fetch" }, { id: "axios", label: "Axios" }, { id: "xhr", label: "XMLHttpRequest" }] },
@@ -130640,13 +130749,13 @@ BODY`
 });
 
 // src/runtime/start-hub.ts
-var import_node_path13 = require("node:path");
+var import_node_path14 = require("node:path");
 var import_node_os2 = require("node:os");
-var import_node_fs14 = require("node:fs");
+var import_node_fs15 = require("node:fs");
 
 // src/runtime/container.ts
-var import_node_fs4 = require("node:fs");
-var import_node_path4 = require("node:path");
+var import_node_fs5 = require("node:fs");
+var import_node_path5 = require("node:path");
 init_types();
 init_ids();
 
@@ -132454,9 +132563,133 @@ function decryptBuf(key, payload) {
   return out.toString("utf8");
 }
 
-// src/services/console/consoleService.ts
+// src/services/session/sessionStore.ts
 var import_node_fs3 = require("node:fs");
 var import_node_path3 = require("node:path");
+
+// src/shared/session.ts
+var SESSION_VERSION = 1;
+
+// src/services/session/sessionStore.ts
+function emptySession() {
+  return {
+    version: SESSION_VERSION,
+    savedAt: (/* @__PURE__ */ new Date(0)).toISOString(),
+    cleanExit: false,
+    saveCounter: 0,
+    tabs: [],
+    activeTabId: null,
+    expandedNodes: []
+  };
+}
+function sanitize(incoming) {
+  const base = emptySession();
+  const out = { ...base, ...incoming };
+  out.version = SESSION_VERSION;
+  if (!Array.isArray(out.tabs)) out.tabs = [];
+  if (!Array.isArray(out.expandedNodes)) out.expandedNodes = [];
+  out.tabs = out.tabs.slice(0, 200).map((t) => ({
+    id: String(t.id),
+    kind: String(t.kind ?? "request"),
+    title: String(t.title ?? "Tab"),
+    entityId: t.entityId ? String(t.entityId) : void 0,
+    pinned: !!t.pinned,
+    dirty: !!t.dirty,
+    draft: t.draft ?? void 0,
+    view: t.view ?? void 0
+  }));
+  return out;
+}
+var SessionStore = class {
+  filePath;
+  tmpPath;
+  previousPath;
+  state;
+  recoveredFromCrash = false;
+  crashNote = "";
+  constructor(dataDir) {
+    (0, import_node_fs3.mkdirSync)(dataDir, { recursive: true });
+    this.filePath = (0, import_node_path3.join)(dataDir, "session.json");
+    this.tmpPath = (0, import_node_path3.join)(dataDir, "session.json.tmp");
+    this.previousPath = (0, import_node_path3.join)(dataDir, "session.previous.json");
+    this.state = this.load();
+  }
+  load() {
+    if (!(0, import_node_fs3.existsSync)(this.filePath)) return emptySession();
+    try {
+      const raw = (0, import_node_fs3.readFileSync)(this.filePath, "utf8");
+      const parsed = JSON.parse(raw);
+      const state2 = sanitize(parsed);
+      if (state2.cleanExit === false && state2.saveCounter > 0) {
+        this.recoveredFromCrash = true;
+        this.crashNote = `Previous session (last saved ${state2.savedAt}) did not record a clean exit.`;
+        try {
+          (0, import_node_fs3.copyFileSync)(this.filePath, this.previousPath);
+        } catch {
+        }
+      }
+      return state2;
+    } catch (e) {
+      const quarantine = (0, import_node_path3.join)((0, import_node_path3.join)(this.filePath, ".."), `session.corrupt-${Date.now()}.json`);
+      try {
+        (0, import_node_fs3.copyFileSync)(this.filePath, quarantine);
+        this.crashNote = `Session file unreadable; quarantined to ${quarantine}: ${String(e)}`;
+      } catch {
+        this.crashNote = `Session file unreadable and could not be quarantined: ${String(e)}`;
+      }
+      this.recoveredFromCrash = true;
+      return emptySession();
+    }
+  }
+  get() {
+    return this.state;
+  }
+  recoveryStatus() {
+    return {
+      recoveredFromCrash: this.recoveredFromCrash,
+      note: this.crashNote,
+      savedAt: this.state.savedAt,
+      tabCount: this.state.tabs.length
+    };
+  }
+  /** Merge-and-persist a partial state. Always stamps cleanExit:false (live). */
+  save(patch) {
+    const merged = sanitize({ ...this.state, ...patch, version: SESSION_VERSION });
+    merged.saveCounter = this.state.saveCounter + 1;
+    merged.savedAt = (/* @__PURE__ */ new Date()).toISOString();
+    merged.cleanExit = false;
+    this.state = merged;
+    this.persist();
+    return merged;
+  }
+  /** Called on graceful shutdown: flips the clean-exit marker without changing anything else. */
+  markCleanExit() {
+    this.state = { ...this.state, cleanExit: true, savedAt: (/* @__PURE__ */ new Date()).toISOString() };
+    this.persist();
+    return this.state;
+  }
+  clear() {
+    this.state = { ...emptySession(), cleanExit: true, savedAt: (/* @__PURE__ */ new Date()).toISOString() };
+    this.persist();
+  }
+  persist() {
+    try {
+      const json = JSON.stringify(this.state);
+      (0, import_node_fs3.writeFileSync)(this.tmpPath, json, "utf8");
+      (0, import_node_fs3.renameSync)(this.tmpPath, this.filePath);
+    } catch (e) {
+      console.error("[session] failed to persist session:", e instanceof Error ? e.message : e);
+      try {
+        if ((0, import_node_fs3.existsSync)(this.tmpPath)) (0, import_node_fs3.renameSync)(this.tmpPath, `${this.tmpPath}.failed-${Date.now()}`);
+      } catch {
+      }
+    }
+  }
+};
+
+// src/services/console/consoleService.ts
+var import_node_fs4 = require("node:fs");
+var import_node_path4 = require("node:path");
 init_ids();
 init_types();
 var ConsoleStore = class {
@@ -132468,9 +132701,9 @@ var ConsoleStore = class {
   ensureLoaded() {
     if (this.loaded) return;
     this.loaded = true;
-    if ((0, import_node_fs3.existsSync)(this.deps.filePath)) {
+    if ((0, import_node_fs4.existsSync)(this.deps.filePath)) {
       try {
-        for (const line of (0, import_node_fs3.readFileSync)(this.deps.filePath, "utf8").split("\n")) {
+        for (const line of (0, import_node_fs4.readFileSync)(this.deps.filePath, "utf8").split("\n")) {
           if (!line.trim()) continue;
           try {
             this.cache.push(JSON.parse(line));
@@ -132494,8 +132727,8 @@ var ConsoleStore = class {
     this.cache.push(entry);
     if (this.cache.length > this.deps.maxEntries) this.cache.splice(0, this.cache.length - this.deps.maxEntries);
     try {
-      (0, import_node_fs3.mkdirSync)((0, import_node_path3.dirname)(this.deps.filePath), { recursive: true });
-      (0, import_node_fs3.appendFileSync)(this.deps.filePath, JSON.stringify(entry) + "\n");
+      (0, import_node_fs4.mkdirSync)((0, import_node_path4.dirname)(this.deps.filePath), { recursive: true });
+      (0, import_node_fs4.appendFileSync)(this.deps.filePath, JSON.stringify(entry) + "\n");
     } catch {
     }
     try {
@@ -132515,7 +132748,7 @@ var ConsoleStore = class {
   clear() {
     this.cache = [];
     try {
-      if ((0, import_node_fs3.existsSync)(this.deps.filePath)) (0, import_node_fs3.writeFileSync)(this.deps.filePath, "");
+      if ((0, import_node_fs4.existsSync)(this.deps.filePath)) (0, import_node_fs4.writeFileSync)(this.deps.filePath, "");
     } catch {
     }
   }
@@ -132531,8 +132764,8 @@ var ConsoleStore = class {
   rewrite() {
     try {
       const tmp = `${this.deps.filePath}.tmp`;
-      (0, import_node_fs3.writeFileSync)(tmp, this.cache.map((e) => JSON.stringify(e)).join("\n") + (this.cache.length > 0 ? "\n" : ""));
-      (0, import_node_fs3.renameSync)(tmp, this.deps.filePath);
+      (0, import_node_fs4.writeFileSync)(tmp, this.cache.map((e) => JSON.stringify(e)).join("\n") + (this.cache.length > 0 ? "\n" : ""));
+      (0, import_node_fs4.renameSync)(tmp, this.deps.filePath);
     } catch {
     }
   }
@@ -132544,8 +132777,8 @@ var ConsoleStore = class {
 // src/runtime/container.ts
 var import_tough_cookie = __toESM(require_cookie2(), 1);
 async function createContainer(config) {
-  (0, import_node_fs4.mkdirSync)(config.dataDir, { recursive: true });
-  const dbPath = (0, import_node_path4.join)(config.dataDir, "api_manager.db");
+  (0, import_node_fs5.mkdirSync)(config.dataDir, { recursive: true });
+  const dbPath = (0, import_node_path5.join)(config.dataDir, "api_manager.db");
   const { db, corrupted, recoveredFrom } = await SqliteDb.open(dbPath);
   const repos = new Repos(db);
   let emitFn = config.emit ?? (() => void 0);
@@ -132556,7 +132789,7 @@ async function createContainer(config) {
     }
   };
   const consoleStore = new ConsoleStore({
-    filePath: (0, import_node_path4.join)(config.dataDir, "console.log"),
+    filePath: (0, import_node_path5.join)(config.dataDir, "console.log"),
     maxEntries: 2e4,
     retentionHours: 24 * 7,
     emit: (type, payload) => emit2(type, payload)
@@ -132577,11 +132810,16 @@ async function createContainer(config) {
   vault.setOnLocked(() => emit2("vault.locked", {}));
   const autoLock = Number(repos.getSetting("vault.autoLockMinutes") ?? 30);
   if (Number.isFinite(autoLock) && autoLock >= 0) vault.setAutoLockMinutes(autoLock);
+  const session = new SessionStore(config.dataDir);
+  if (session.recoveryStatus().recoveredFromCrash) {
+    log("warn", "session", session.recoveryStatus().note);
+  }
   const container = {
     dataDir: config.dataDir,
     db,
     repos,
     vault,
+    session,
     consoleStore,
     get settings() {
       return settings;
@@ -132807,7 +133045,7 @@ async function createContainer(config) {
     const read = (p) => {
       if (!p) return void 0;
       try {
-        return (0, import_node_fs4.readFileSync)(p);
+        return (0, import_node_fs5.readFileSync)(p);
       } catch {
         return void 0;
       }
@@ -132823,7 +133061,7 @@ async function createContainer(config) {
     const pfxPath = certRecord.pfxPath;
     if (pfxPath) {
       try {
-        material.pfx = (0, import_node_fs4.readFileSync)(pfxPath);
+        material.pfx = (0, import_node_fs5.readFileSync)(pfxPath);
       } catch {
       }
     }
@@ -132914,10 +133152,26 @@ function mergeDeepRecords(base, patch) {
 }
 
 // src/runtime/registry.ts
-var import_node_fs12 = require("node:fs");
-var import_node_path11 = require("node:path");
+var import_node_fs13 = require("node:fs");
+var import_node_path12 = require("node:path");
 var import_undici8 = __toESM(require_undici(), 1);
 init_ids();
+
+// src/shared/app-meta.ts
+var APP_META = {
+  name: "API Manager",
+  productName: "API Manager",
+  version: "1.0.0",
+  developer: "Manish Kumar Singh",
+  author: "Manish Kumar Singh",
+  email: "manishkumars264@gmail.com",
+  description: "Offline-first Postman-class desktop API development and testing application",
+  appId: "com.apimanager.offline",
+  license: "MIT",
+  website: "local-only (no telemetry, no cloud)"
+};
+
+// src/runtime/registry.ts
 init_types();
 init_sendPipeline();
 init_engine();
@@ -137487,6 +137741,66 @@ function socketIoClose(sessionId) {
 var import_undici3 = __toESM(require_undici(), 1);
 var import_node_crypto8 = require("node:crypto");
 var sessions2 = /* @__PURE__ */ new Map();
+function createSseParser(onFrame, onRetry) {
+  let buffer = "";
+  let dataBuf = "";
+  let evName;
+  let evId;
+  const dispatch = () => {
+    if (dataBuf !== "") {
+      onFrame({ event: evName, data: dataBuf.replace(/\n$/, ""), id: evId });
+    }
+    dataBuf = "";
+    evName = void 0;
+    evId = void 0;
+  };
+  const handleLine = (rawLine) => {
+    const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
+    if (line === "") {
+      dispatch();
+      return;
+    }
+    if (line.startsWith(":")) return;
+    const colon = line.indexOf(":");
+    const field = colon === -1 ? line : line.slice(0, colon);
+    let value2 = colon === -1 ? "" : line.slice(colon + 1);
+    if (value2.startsWith(" ")) value2 = value2.slice(1);
+    switch (field) {
+      case "data":
+        dataBuf += value2 + "\n";
+        break;
+      case "event":
+        evName = value2;
+        break;
+      case "id":
+        if (!value2.includes("\0")) evId = value2;
+        break;
+      case "retry": {
+        const n = Number(value2);
+        if (Number.isFinite(n) && n >= 0) onRetry?.(Math.round(n));
+        break;
+      }
+      default:
+        break;
+    }
+  };
+  return {
+    feed(text) {
+      buffer += text;
+      let idx;
+      while ((idx = buffer.indexOf("\n")) >= 0) {
+        const rawLine = buffer.slice(0, idx);
+        buffer = buffer.slice(idx + 1);
+        handleLine(rawLine);
+      }
+    },
+    flush() {
+      if (buffer) handleLine(buffer);
+      if (dataBuf !== "") dispatch();
+      buffer = "";
+    }
+  };
+}
 function sseClose(sessionId) {
   const s = sessions2.get(sessionId);
   if (s) {
@@ -137517,48 +137831,18 @@ async function pump(session, emit2) {
         maxRedirections: 5
       });
       if (res.statusCode >= 400) throw new Error(`SSE connect failed: HTTP ${res.statusCode}`);
-      let dataBuf = "";
-      let evName;
-      let evId;
+      const parser = createSseParser((ev) => {
+        emit2("sse.frame", { sessionId: session.id, ...ev });
+        if (ev.id !== void 0) session.lastEventId = ev.id;
+      }, (retryMs) => {
+        session.retryMs = retryMs;
+      });
       for await (const chunk of res.body) {
         if (session.closed) break;
         const text = typeof chunk === "string" ? chunk : Buffer.from(chunk).toString("utf8");
-        for (const rawLine of text.split("\n")) {
-          const line = rawLine.endsWith("\r") ? rawLine.slice(0, -1) : rawLine;
-          if (line === "") {
-            if (dataBuf !== "") {
-              const ev = { sessionId: session.id, event: evName, data: dataBuf.replace(/\n$/, ""), id: evId };
-              emit2("sse.frame", ev);
-              if (evId !== void 0) session.lastEventId = evId;
-            }
-            dataBuf = "";
-            evName = void 0;
-            evId = void 0;
-            continue;
-          }
-          if (line.startsWith(":")) continue;
-          const colon = line.indexOf(":");
-          const field = colon === -1 ? line : line.slice(0, colon);
-          let value2 = colon === -1 ? "" : line.slice(colon + 1);
-          if (value2.startsWith(" ")) value2 = value2.slice(1);
-          switch (field) {
-            case "data":
-              dataBuf += value2 + "\n";
-              break;
-            case "event":
-              evName = value2;
-              break;
-            case "id":
-              evId = value2;
-              break;
-            case "retry": {
-              const n = Number(value2);
-              if (Number.isFinite(n) && n >= 0) session.retryMs = n;
-              break;
-            }
-          }
-        }
+        parser.feed(text);
       }
+      parser.flush();
       if (session.closed) break;
       emit2("sse.frame", { sessionId: session.id, event: "sys", data: `stream ended; reconnecting in ${session.retryMs}ms` });
     } catch (e) {
@@ -137641,7 +137925,7 @@ function mqttClose(sessionId) {
 var grpc = __toESM(require("@grpc/grpc-js"), 1);
 var import_protobufjs = __toESM(require_protobufjs(), 1);
 var import_descriptor = __toESM(require_descriptor2(), 1);
-var import_node_fs6 = require("node:fs");
+var import_node_fs7 = require("node:fs");
 var import_node_crypto10 = require("node:crypto");
 var reflectionProto = `
 syntax = "proto3";
@@ -137815,8 +138099,8 @@ async function loadSchema(serverUrl, config) {
   if (config.protoFiles?.length) {
     root = new import_protobufjs.default.Root();
     for (const file of config.protoFiles) {
-      if (!(0, import_node_fs6.existsSync)(file)) throw new Error(`proto file not found: ${file}`);
-      const parsed = import_protobufjs.default.parse((0, import_node_fs6.readFileSync)(file, "utf8"), { keepCase: true });
+      if (!(0, import_node_fs7.existsSync)(file)) throw new Error(`proto file not found: ${file}`);
+      const parsed = import_protobufjs.default.parse((0, import_node_fs7.readFileSync)(file, "utf8"), { keepCase: true });
       for (const n of parsed.root.nestedArray) root.add(n);
     }
   } else {
@@ -138369,23 +138653,23 @@ var index2 = { request: request4 };
 var node_default = index2;
 
 // src/services/git/gitService.ts
-var import_node_fs7 = __toESM(require("node:fs"), 1);
-var import_node_path6 = __toESM(require("node:path"), 1);
+var import_node_fs8 = __toESM(require("node:fs"), 1);
+var import_node_path7 = __toESM(require("node:path"), 1);
 init_scanner();
 function repo(path2) {
-  if (!import_node_fs7.default.existsSync(path2)) throw new Error(`git path does not exist: ${path2}`);
+  if (!import_node_fs8.default.existsSync(path2)) throw new Error(`git path does not exist: ${path2}`);
   return path2;
 }
 async function gitInit(dir) {
-  import_node_fs7.default.mkdirSync(dir, { recursive: true });
-  await import_isomorphic_git.default.init({ fs: import_node_fs7.default, dir, defaultBranch: "main" });
+  import_node_fs8.default.mkdirSync(dir, { recursive: true });
+  await import_isomorphic_git.default.init({ fs: import_node_fs8.default, dir, defaultBranch: "main" });
   await writeGitignore(dir);
   return { path: dir };
 }
 async function gitClone(args) {
-  import_node_fs7.default.mkdirSync(args.path, { recursive: true });
+  import_node_fs8.default.mkdirSync(args.path, { recursive: true });
   await import_isomorphic_git.default.clone({
-    fs: import_node_fs7.default,
+    fs: import_node_fs8.default,
     http: node_default,
     dir: args.path,
     url: args.url,
@@ -138395,7 +138679,7 @@ async function gitClone(args) {
   return { path: args.path };
 }
 async function gitStatus(dir) {
-  const matrix = await import_isomorphic_git.default.statusMatrix({ fs: import_node_fs7.default, dir: repo(dir) });
+  const matrix = await import_isomorphic_git.default.statusMatrix({ fs: import_node_fs8.default, dir: repo(dir) });
   const staged = [];
   const modified = [];
   const untracked = [];
@@ -138409,16 +138693,16 @@ async function gitStatus(dir) {
     else if (head === 1 && workdir === 0 && stage === 3) staged.push(file);
     else if (head === 1 && workdir === 0 && stage === 1) modified.push(file);
   }
-  const branch = await import_isomorphic_git.default.currentBranch({ fs: import_node_fs7.default, dir, fullname: false }) ?? "HEAD";
+  const branch = await import_isomorphic_git.default.currentBranch({ fs: import_node_fs8.default, dir, fullname: false }) ?? "HEAD";
   let ahead = 0;
   let behind = 0;
   try {
-    const remoteInfo = await import_isomorphic_git.default.listRemotes({ fs: import_node_fs7.default, dir });
+    const remoteInfo = await import_isomorphic_git.default.listRemotes({ fs: import_node_fs8.default, dir });
     const remote = remoteInfo[0]?.remote;
     if (remote) {
       const remoteRef = `refs/remotes/${remote}/${branch}`;
-      const localOid = await import_isomorphic_git.default.resolveRef({ fs: import_node_fs7.default, dir, ref: branch }).catch(() => void 0);
-      const remoteOid = await import_isomorphic_git.default.resolveRef({ fs: import_node_fs7.default, dir, ref: remoteRef }).catch(() => void 0);
+      const localOid = await import_isomorphic_git.default.resolveRef({ fs: import_node_fs8.default, dir, ref: branch }).catch(() => void 0);
+      const remoteOid = await import_isomorphic_git.default.resolveRef({ fs: import_node_fs8.default, dir, ref: remoteRef }).catch(() => void 0);
       if (localOid && remoteOid) {
       }
     }
@@ -138428,16 +138712,16 @@ async function gitStatus(dir) {
 }
 async function gitAdd(dir, files) {
   for (const file of files) {
-    const full = import_node_path6.default.join(dir, file);
-    if (import_node_fs7.default.existsSync(full)) await import_isomorphic_git.default.add({ fs: import_node_fs7.default, dir, filepath: file });
-    else await import_isomorphic_git.default.remove({ fs: import_node_fs7.default, dir, filepath: file });
+    const full = import_node_path7.default.join(dir, file);
+    if (import_node_fs8.default.existsSync(full)) await import_isomorphic_git.default.add({ fs: import_node_fs8.default, dir, filepath: file });
+    else await import_isomorphic_git.default.remove({ fs: import_node_fs8.default, dir, filepath: file });
   }
 }
 async function gitAddAll(dir) {
-  const matrix = await import_isomorphic_git.default.statusMatrix({ fs: import_node_fs7.default, dir });
+  const matrix = await import_isomorphic_git.default.statusMatrix({ fs: import_node_fs8.default, dir });
   for (const [file, head, workdir] of matrix) {
-    if (head === 1 && workdir === 0) await import_isomorphic_git.default.remove({ fs: import_node_fs7.default, dir, filepath: file });
-    else await import_isomorphic_git.default.add({ fs: import_node_fs7.default, dir, filepath: file });
+    if (head === 1 && workdir === 0) await import_isomorphic_git.default.remove({ fs: import_node_fs8.default, dir, filepath: file });
+    else await import_isomorphic_git.default.add({ fs: import_node_fs8.default, dir, filepath: file });
   }
 }
 async function gitCommit(args) {
@@ -138447,30 +138731,30 @@ async function gitCommit(args) {
   if (!args.skipSecretScan && blocking.length > 0) {
     throw new Error(`Commit blocked: ${blocking.length} potential secret(s) detected in staged files. Re-run with skipSecretScan to override.`);
   }
-  const oid = await import_isomorphic_git.default.commit({ fs: import_node_fs7.default, dir, message: args.message, author: { name: args.author.name, email: args.author.email } });
+  const oid = await import_isomorphic_git.default.commit({ fs: import_node_fs8.default, dir, message: args.message, author: { name: args.author.name, email: args.author.email } });
   return { oid, findings };
 }
 async function gitBranches(dir) {
-  return import_isomorphic_git.default.listBranches({ fs: import_node_fs7.default, dir: repo(dir) });
+  return import_isomorphic_git.default.listBranches({ fs: import_node_fs8.default, dir: repo(dir) });
 }
 async function gitCreateBranch(dir, name2, checkout) {
-  await import_isomorphic_git.default.branch({ fs: import_node_fs7.default, dir: repo(dir), ref: name2, checkout });
+  await import_isomorphic_git.default.branch({ fs: import_node_fs8.default, dir: repo(dir), ref: name2, checkout });
 }
 async function gitCheckout(dir, ref) {
-  await import_isomorphic_git.default.checkout({ fs: import_node_fs7.default, dir: repo(dir), ref });
+  await import_isomorphic_git.default.checkout({ fs: import_node_fs8.default, dir: repo(dir), ref });
 }
 async function gitMerge(dir, branch) {
-  const current = await import_isomorphic_git.default.currentBranch({ fs: import_node_fs7.default, dir: repo(dir), fullname: false }) ?? "HEAD";
-  const merged = await import_isomorphic_git.default.merge({ fs: import_node_fs7.default, dir, ours: current, theirs: branch, author: { name: "API Manager", email: "noreply@api-manager.local" } });
+  const current = await import_isomorphic_git.default.currentBranch({ fs: import_node_fs8.default, dir: repo(dir), fullname: false }) ?? "HEAD";
+  const merged = await import_isomorphic_git.default.merge({ fs: import_node_fs8.default, dir, ours: current, theirs: branch, author: { name: "API Manager", email: "noreply@api-manager.local" } });
   const conflictsRoot = merged.mergeConflict;
   return { merged: !conflictsRoot || conflictsRoot.length === 0, conflicts: conflictsRoot ?? [] };
 }
 async function gitFetch(dir, remote, auth) {
-  await import_isomorphic_git.default.fetch({ fs: import_node_fs7.default, http: node_default, dir: repo(dir), remote: remote ?? "origin", onAuth: auth?.username ? () => ({ username: auth.username, password: auth.password }) : void 0 });
+  await import_isomorphic_git.default.fetch({ fs: import_node_fs8.default, http: node_default, dir: repo(dir), remote: remote ?? "origin", onAuth: auth?.username ? () => ({ username: auth.username, password: auth.password }) : void 0 });
 }
 async function gitPull(dir, remote, auth) {
   await import_isomorphic_git.default.pull({
-    fs: import_node_fs7.default,
+    fs: import_node_fs8.default,
     http: node_default,
     dir: repo(dir),
     remote: remote ?? "origin",
@@ -138481,11 +138765,11 @@ async function gitPull(dir, remote, auth) {
   });
 }
 async function gitPush(dir, remote, auth) {
-  await import_isomorphic_git.default.push({ fs: import_node_fs7.default, http: node_default, dir: repo(dir), remote: remote ?? "origin", onAuth: auth?.username ? () => ({ username: auth.username, password: auth.password }) : void 0 });
+  await import_isomorphic_git.default.push({ fs: import_node_fs8.default, http: node_default, dir: repo(dir), remote: remote ?? "origin", onAuth: auth?.username ? () => ({ username: auth.username, password: auth.password }) : void 0 });
 }
 async function gitStash(dir, message) {
   try {
-    await import_isomorphic_git.default.stash({ fs: import_node_fs7.default, dir: repo(dir), op: "push", message: message ?? "api-manager stash" });
+    await import_isomorphic_git.default.stash({ fs: import_node_fs8.default, dir: repo(dir), op: "push", message: message ?? "api-manager stash" });
   } catch (e) {
     const why = e instanceof Error ? e.message : String(e);
     throw new Error(`git.stash failed: ${why} \u2014 note: isomorphic-git stashes tracked files with loose objects only; if the repo uses packed objects, commit or checkout first, or commit onto a temporary "stash/<label>" branch and return with git.checkout`);
@@ -138493,14 +138777,14 @@ async function gitStash(dir, message) {
 }
 async function gitStashPop(dir) {
   try {
-    await import_isomorphic_git.default.stash({ fs: import_node_fs7.default, dir: repo(dir), op: "pop" });
+    await import_isomorphic_git.default.stash({ fs: import_node_fs8.default, dir: repo(dir), op: "pop" });
   } catch (e) {
     const why = e instanceof Error ? e.message : String(e);
     throw new Error(`git.stashPop failed: ${why} (nothing stashed, or packed-object repo)`);
   }
 }
 async function gitLog(dir, limit = 50) {
-  const commits = await import_isomorphic_git.default.log({ fs: import_node_fs7.default, dir: repo(dir), depth: limit });
+  const commits = await import_isomorphic_git.default.log({ fs: import_node_fs8.default, dir: repo(dir), depth: limit });
   return commits.map((c) => ({
     oid: c.oid,
     message: c.commit.message.trim(),
@@ -138515,13 +138799,13 @@ async function gitDiff(dir, file, staged) {
   for (const f of files) {
     let working = "";
     try {
-      working = import_node_fs7.default.readFileSync(import_node_path6.default.join(dirPath, f), "utf8");
+      working = import_node_fs8.default.readFileSync(import_node_path7.default.join(dirPath, f), "utf8");
     } catch {
       working = "";
     }
     try {
-      const headOid = await import_isomorphic_git.default.resolveRef({ fs: import_node_fs7.default, dir: dirPath, ref: "HEAD" });
-      const { blob } = await import_isomorphic_git.default.readBlob({ fs: import_node_fs7.default, dir: dirPath, oid: headOid, filepath: f });
+      const headOid = await import_isomorphic_git.default.resolveRef({ fs: import_node_fs8.default, dir: dirPath, ref: "HEAD" });
+      const { blob } = await import_isomorphic_git.default.readBlob({ fs: import_node_fs8.default, dir: dirPath, oid: headOid, filepath: f });
       const headText = Buffer.from(blob).toString("utf8");
       chunks.push(buildUnifiedDiff(f, headText, working, staged ? "staged" : "working tree"));
     } catch {
@@ -138545,14 +138829,14 @@ function buildUnifiedDiff(file, before, after, label) {
   return lines.join("\n");
 }
 async function gitRemotes(dir) {
-  const remotes = await import_isomorphic_git.default.listRemotes({ fs: import_node_fs7.default, dir: repo(dir) });
+  const remotes = await import_isomorphic_git.default.listRemotes({ fs: import_node_fs8.default, dir: repo(dir) });
   return remotes.map((r) => ({ name: r.remote, url: r.url }));
 }
 async function gitAddRemote(dir, name2, url2) {
-  await import_isomorphic_git.default.addRemote({ fs: import_node_fs7.default, dir: repo(dir), remote: name2, url: url2, force: true });
+  await import_isomorphic_git.default.addRemote({ fs: import_node_fs8.default, dir: repo(dir), remote: name2, url: url2, force: true });
 }
 async function writeGitignore(dir) {
-  const target = import_node_path6.default.join(dir, ".gitignore");
+  const target = import_node_path7.default.join(dir, ".gitignore");
   const rules = [
     "# API Manager \u2014 protected local files",
     "vault.bin",
@@ -138569,14 +138853,14 @@ async function writeGitignore(dir) {
     "backups/encrypted_*.zip",
     ".api-manager-secrets"
   ].join("\n");
-  if (import_node_fs7.default.existsSync(target)) {
-    const existing = import_node_fs7.default.readFileSync(target, "utf8");
+  if (import_node_fs8.default.existsSync(target)) {
+    const existing = import_node_fs8.default.readFileSync(target, "utf8");
     const missing = rules.split("\n").filter((line) => line.trim() && !line.startsWith("#") && !existing.includes(line));
-    if (missing.length > 0) import_node_fs7.default.appendFileSync(target, `
+    if (missing.length > 0) import_node_fs8.default.appendFileSync(target, `
 ${missing.join("\n")}
 `);
   } else {
-    import_node_fs7.default.writeFileSync(target, rules + "\n");
+    import_node_fs8.default.writeFileSync(target, rules + "\n");
   }
 }
 async function gitSecretScan(dir) {
@@ -138586,7 +138870,7 @@ async function gitSecretScan(dir) {
   for (const file of targets) {
     if (/vault\.bin|\.gitignore|\.zip$|\.png$|\.jpg$|\.ico$|\.wasm$|node_modules\//.test(file)) continue;
     try {
-      const text = import_node_fs7.default.readFileSync(import_node_path6.default.join(dir, file), "utf8");
+      const text = import_node_fs8.default.readFileSync(import_node_path7.default.join(dir, file), "utf8");
       findings.push(...scanTextForSecrets(text, `git:${file}`));
     } catch {
     }
@@ -138597,17 +138881,17 @@ async function gitSecretScan(dir) {
 // src/services/backup/backupService.ts
 var import_adm_zip = __toESM(require_adm_zip(), 1);
 var import_node_crypto12 = require("node:crypto");
-var import_node_fs8 = require("node:fs");
-var import_node_path7 = require("node:path");
+var import_node_fs9 = require("node:fs");
+var import_node_path8 = require("node:path");
 init_ids();
 init_types();
 var MAGIC = Buffer.from("AMBK1");
 function createBackup(deps, opts) {
-  (0, import_node_fs8.mkdirSync)(deps.backupDir, { recursive: true });
+  (0, import_node_fs9.mkdirSync)(deps.backupDir, { recursive: true });
   const id = uid();
   const stamp = now().replace(/[:.]/g, "-");
   const name2 = `${opts.kind ?? "manual"}_${stamp}_${id.slice(0, 8)}.zip`;
-  const target = (0, import_node_path7.join)(deps.backupDir, name2);
+  const target = (0, import_node_path8.join)(deps.backupDir, name2);
   const dataJson = deps.exportDataJson();
   const sha256Data = (0, import_node_crypto12.createHash)("sha256").update(dataJson).digest("hex");
   let payload = Buffer.from(dataJson, "utf8");
@@ -138635,9 +138919,9 @@ function createBackup(deps, opts) {
     payload = Buffer.concat([MAGIC, payload]);
   }
   let dbBytes;
-  if ((0, import_node_fs8.existsSync)(deps.dbFilePath)) {
+  if ((0, import_node_fs9.existsSync)(deps.dbFilePath)) {
     try {
-      dbBytes = (0, import_node_fs8.readFileSync)(deps.dbFilePath);
+      dbBytes = (0, import_node_fs9.readFileSync)(deps.dbFilePath);
       manifest.tables.dbFileSha256 = (0, import_node_crypto12.createHash)("sha256").update(dbBytes).digest("hex");
     } catch {
     }
@@ -138647,25 +138931,25 @@ function createBackup(deps, opts) {
   zip.addFile("data.json", payload);
   if (dbBytes && !opts.encryptPassword) zip.addFile("api_manager.db", dbBytes);
   zip.writeZip(target);
-  const sizeBytes = (0, import_node_fs8.statSync)(target).size;
-  const sha256 = (0, import_node_crypto12.createHash)("sha256").update((0, import_node_fs8.readFileSync)(target)).digest("hex");
+  const sizeBytes = (0, import_node_fs9.statSync)(target).size;
+  const sha256 = (0, import_node_crypto12.createHash)("sha256").update((0, import_node_fs9.readFileSync)(target)).digest("hex");
   return { id, path: target, createdAt: manifest.createdAt, sizeBytes, encrypted: !!opts.encryptPassword, sha256, kind: opts.kind ?? "manual", note: opts.note };
 }
 function listBackups(deps) {
-  if (!(0, import_node_fs8.existsSync)(deps.backupDir)) return [];
+  if (!(0, import_node_fs9.existsSync)(deps.backupDir)) return [];
   const out = [];
-  for (const name2 of (0, import_node_fs8.readdirSync)(deps.backupDir)) {
+  for (const name2 of (0, import_node_fs9.readdirSync)(deps.backupDir)) {
     if (!name2.endsWith(".zip")) continue;
-    const p = (0, import_node_path7.join)(deps.backupDir, name2);
+    const p = (0, import_node_path8.join)(deps.backupDir, name2);
     try {
       const manifest = readManifest(p);
       if (!manifest) continue;
-      const sha256 = (0, import_node_crypto12.createHash)("sha256").update((0, import_node_fs8.readFileSync)(p)).digest("hex");
+      const sha256 = (0, import_node_crypto12.createHash)("sha256").update((0, import_node_fs9.readFileSync)(p)).digest("hex");
       out.push({
         id: manifest.id,
         path: p,
         createdAt: manifest.createdAt,
-        sizeBytes: (0, import_node_fs8.statSync)(p).size,
+        sizeBytes: (0, import_node_fs9.statSync)(p).size,
         encrypted: manifest.encrypted,
         sha256,
         kind: manifest.backupKind ?? "manual",
@@ -138689,13 +138973,13 @@ function readManifest(path2) {
 function deleteBackup(path2, deps) {
   const resolved = path2;
   if (!resolved.startsWith(deps.backupDir)) throw new Error("Backup path outside backup dir refused");
-  if (!(0, import_node_fs8.existsSync)(resolved)) throw new Error("Backup not found");
-  (0, import_node_fs8.unlinkSync)(resolved);
+  if (!(0, import_node_fs9.existsSync)(resolved)) throw new Error("Backup not found");
+  (0, import_node_fs9.unlinkSync)(resolved);
 }
 function verifyBackup(path2, _deps) {
-  if (!(0, import_node_fs8.existsSync)(path2)) return { ok: false, sha256: "" };
+  if (!(0, import_node_fs9.existsSync)(path2)) return { ok: false, sha256: "" };
   const manifest = readManifest(path2);
-  const sha256 = (0, import_node_crypto12.createHash)("sha256").update((0, import_node_fs8.readFileSync)(path2)).digest("hex");
+  const sha256 = (0, import_node_crypto12.createHash)("sha256").update((0, import_node_fs9.readFileSync)(path2)).digest("hex");
   if (!manifest) return { ok: false, sha256 };
   const zip = new import_adm_zip.default(path2);
   const data = zip.getEntry("data.json");
@@ -138960,8 +139244,8 @@ function parseLinuxNetstat(out) {
 
 // src/services/docs/docsService.ts
 var import_node_http6 = __toESM(require("node:http"), 1);
-var import_node_fs9 = require("node:fs");
-var import_node_path8 = require("node:path");
+var import_node_fs10 = require("node:fs");
+var import_node_path9 = require("node:path");
 
 // src/core/docsx/docsGen.ts
 init_xmlUtils();
@@ -139105,8 +139389,8 @@ function renderDocs(args, deps) {
 }
 function exportDocs(args, deps) {
   const { html } = renderDocs(args, deps);
-  (0, import_node_fs9.mkdirSync)((0, import_node_path8.dirname)(args.path), { recursive: true });
-  (0, import_node_fs9.writeFileSync)(args.path, html);
+  (0, import_node_fs10.mkdirSync)((0, import_node_path9.dirname)(args.path), { recursive: true });
+  (0, import_node_fs10.writeFileSync)(args.path, html);
   return { path: args.path };
 }
 async function serveDocs(args, deps) {
@@ -139140,8 +139424,8 @@ async function serveDocs(args, deps) {
 // src/services/plugins/pluginManager.ts
 var import_adm_zip2 = __toESM(require_adm_zip(), 1);
 var import_node_vm2 = __toESM(require("node:vm"), 1);
-var import_node_fs10 = require("node:fs");
-var import_node_path9 = require("node:path");
+var import_node_fs11 = require("node:fs");
+var import_node_path10 = require("node:path");
 var import_adm_zip3 = __toESM(require_adm_zip(), 1);
 init_ids();
 init_types();
@@ -139159,28 +139443,28 @@ function validateManifest(raw) {
   return { ok: errors.length === 0, manifest: m, errors };
 }
 function installPlugin(path2, deps) {
-  const dir = (0, import_node_path9.join)(deps.pluginsDir, uid());
-  (0, import_node_fs10.mkdirSync)(dir, { recursive: true });
+  const dir = (0, import_node_path10.join)(deps.pluginsDir, uid());
+  (0, import_node_fs11.mkdirSync)(dir, { recursive: true });
   if (path2.endsWith(".zip")) {
     const zip = new import_adm_zip3.default(path2);
     zip.extractAllTo(dir, true);
-  } else if ((0, import_node_fs10.existsSync)((0, import_node_path9.join)(path2, "manifest.json"))) {
-    (0, import_node_fs10.cpSync)(path2, dir, { recursive: true });
+  } else if ((0, import_node_fs11.existsSync)((0, import_node_path10.join)(path2, "manifest.json"))) {
+    (0, import_node_fs11.cpSync)(path2, dir, { recursive: true });
   } else {
     throw new Error(`Plugin source not recognized: ${path2} (expected folder with manifest.json or .zip)`);
   }
-  const manifestPath = (0, import_node_path9.join)(dir, "manifest.json");
-  if (!(0, import_node_fs10.existsSync)(manifestPath)) {
-    (0, import_node_fs10.rmSync)(dir, { recursive: true, force: true });
+  const manifestPath = (0, import_node_path10.join)(dir, "manifest.json");
+  if (!(0, import_node_fs11.existsSync)(manifestPath)) {
+    (0, import_node_fs11.rmSync)(dir, { recursive: true, force: true });
     throw new Error("Plugin missing manifest.json at root");
   }
-  const { ok, manifest, errors } = validateManifest(JSON.parse((0, import_node_fs10.readFileSync)(manifestPath, "utf8")));
+  const { ok, manifest, errors } = validateManifest(JSON.parse((0, import_node_fs11.readFileSync)(manifestPath, "utf8")));
   if (!ok || !manifest) {
-    (0, import_node_fs10.rmSync)(dir, { recursive: true, force: true });
+    (0, import_node_fs11.rmSync)(dir, { recursive: true, force: true });
     throw new Error(`Invalid plugin manifest: ${errors.join("; ")}`);
   }
-  if (!(0, import_node_fs10.existsSync)((0, import_node_path9.join)(dir, manifest.entry))) {
-    (0, import_node_fs10.rmSync)(dir, { recursive: true, force: true });
+  if (!(0, import_node_fs11.existsSync)((0, import_node_path10.join)(dir, manifest.entry))) {
+    (0, import_node_fs11.rmSync)(dir, { recursive: true, force: true });
     throw new Error(`Plugin entry file not found: ${manifest.entry}`);
   }
   const plugin2 = { id: uid(), manifest, enabled: true, installedAt: now(), path: dir };
@@ -139191,14 +139475,14 @@ function uninstallPlugin(id, deps) {
   if (!plugin2) throw new Error(`Plugin not found: ${id}`);
   deps.deletePlugin(id);
   try {
-    (0, import_node_fs10.rmSync)(plugin2.path, { recursive: true, force: true });
+    (0, import_node_fs11.rmSync)(plugin2.path, { recursive: true, force: true });
   } catch {
   }
 }
 function runPluginHook(plugin2, hook, payloadJson, deps) {
   if (!plugin2.enabled) throw new Error("Plugin is disabled");
-  const contextPath = (0, import_node_path9.join)(plugin2.path, plugin2.manifest.entry);
-  const code = (0, import_node_fs10.readFileSync)(contextPath, "utf8");
+  const contextPath = (0, import_node_path10.join)(plugin2.path, plugin2.manifest.entry);
+  const code = (0, import_node_fs11.readFileSync)(contextPath, "utf8");
   let payload;
   try {
     payload = JSON.parse(payloadJson);
@@ -139634,26 +139918,26 @@ function maskSecret2(value2) {
 }
 
 // src/services/files/filesService.ts
-var import_node_fs11 = require("node:fs");
-var import_node_path10 = require("node:path");
+var import_node_fs12 = require("node:fs");
+var import_node_path11 = require("node:path");
 var import_node_crypto16 = require("node:crypto");
 init_ids();
 init_types();
 function attachmentsRoot(deps, workspaceId) {
-  return (0, import_node_path10.join)(deps.dataDir, "attachments", workspaceId);
+  return (0, import_node_path11.join)(deps.dataDir, "attachments", workspaceId);
 }
 function browse(deps, target) {
-  const base = (0, import_node_path10.resolve)(deps.dataDir, target ?? ".");
-  if (!base.startsWith((0, import_node_path10.resolve)(deps.dataDir))) throw new Error("Path traversal blocked: browse stays inside the app data dir");
-  if (!(0, import_node_fs11.existsSync)(base)) throw new Error(`Path not found: ${base}`);
-  const st = (0, import_node_fs11.statSync)(base);
-  if (!st.isDirectory()) return [{ name: (0, import_node_path10.basename)(base), path: base, isDir: false, size: st.size }];
-  return (0, import_node_fs11.readdirSync)(base).map((name2) => {
-    const p = (0, import_node_path10.join)(base, name2);
+  const base = (0, import_node_path11.resolve)(deps.dataDir, target ?? ".");
+  if (!base.startsWith((0, import_node_path11.resolve)(deps.dataDir))) throw new Error("Path traversal blocked: browse stays inside the app data dir");
+  if (!(0, import_node_fs12.existsSync)(base)) throw new Error(`Path not found: ${base}`);
+  const st = (0, import_node_fs12.statSync)(base);
+  if (!st.isDirectory()) return [{ name: (0, import_node_path11.basename)(base), path: base, isDir: false, size: st.size }];
+  return (0, import_node_fs12.readdirSync)(base).map((name2) => {
+    const p = (0, import_node_path11.join)(base, name2);
     let isDir = false;
     let size = 0;
     try {
-      const s = (0, import_node_fs11.statSync)(p);
+      const s = (0, import_node_fs12.statSync)(p);
       isDir = s.isDirectory();
       size = s.size;
     } catch {
@@ -139662,27 +139946,27 @@ function browse(deps, target) {
   }).sort((a, b) => a.isDir === b.isDir ? a.name.localeCompare(b.name) : a.isDir ? -1 : 1);
 }
 function readText(path2, deps) {
-  const base = (0, import_node_path10.resolve)(deps.dataDir, path2);
-  if (!base.startsWith((0, import_node_path10.resolve)(deps.dataDir))) throw new Error("Path traversal blocked");
-  if (!(0, import_node_fs11.existsSync)(base)) throw new Error(`File not found: ${base}`);
-  const size = (0, import_node_fs11.statSync)(base).size;
+  const base = (0, import_node_path11.resolve)(deps.dataDir, path2);
+  if (!base.startsWith((0, import_node_path11.resolve)(deps.dataDir))) throw new Error("Path traversal blocked");
+  if (!(0, import_node_fs12.existsSync)(base)) throw new Error(`File not found: ${base}`);
+  const size = (0, import_node_fs12.statSync)(base).size;
   if (size > 10 * 1024 * 1024) throw new Error("File too large to display (10MB max)");
-  return (0, import_node_fs11.readFileSync)(base, "utf8");
+  return (0, import_node_fs12.readFileSync)(base, "utf8");
 }
 function addAttachment(sourcePath, workspaceId, deps) {
-  if (!(0, import_node_fs11.existsSync)(sourcePath)) throw new Error(`File not found: ${sourcePath}`);
+  if (!(0, import_node_fs12.existsSync)(sourcePath)) throw new Error(`File not found: ${sourcePath}`);
   const root = attachmentsRoot(deps, workspaceId);
-  (0, import_node_fs11.mkdirSync)(root, { recursive: true });
-  const name2 = (0, import_node_path10.basename)(sourcePath);
-  const rel = (0, import_node_path10.relative)(process.cwd(), sourcePath).replace(/^(\.\.([/\\]))+/g, "").replace(/[/\\]/g, "_");
+  (0, import_node_fs12.mkdirSync)(root, { recursive: true });
+  const name2 = (0, import_node_path11.basename)(sourcePath);
+  const rel = (0, import_node_path11.relative)(process.cwd(), sourcePath).replace(/^(\.\.([/\\]))+/g, "").replace(/[/\\]/g, "_");
   const targetName = rel || name2;
-  const target = (0, import_node_path10.join)(root, targetName);
-  (0, import_node_fs11.copyFileSync)(sourcePath, target);
-  const content = (0, import_node_fs11.readFileSync)(target);
+  const target = (0, import_node_path11.join)(root, targetName);
+  (0, import_node_fs12.copyFileSync)(sourcePath, target);
+  const content = (0, import_node_fs12.readFileSync)(target);
   const attachment = {
     id: uid(),
     workspaceId,
-    relativePath: (0, import_node_path10.join)("attachments", workspaceId, targetName),
+    relativePath: (0, import_node_path11.join)("attachments", workspaceId, targetName),
     fileName: name2,
     size: content.length,
     sha256: (0, import_node_crypto16.createHash)("sha256").update(content).digest("hex"),
@@ -139695,26 +139979,26 @@ function deleteAttachment(id, deps) {
   const existing = deps.deleteAttachment(id);
   if (!existing) return;
   try {
-    const path2 = (0, import_node_path10.resolve)(deps.dataDir, existing.relativePath);
-    if (path2.startsWith((0, import_node_path10.resolve)(deps.dataDir)) && (0, import_node_fs11.existsSync)(path2)) (0, import_node_fs11.unlinkSync)(path2);
+    const path2 = (0, import_node_path11.resolve)(deps.dataDir, existing.relativePath);
+    if (path2.startsWith((0, import_node_path11.resolve)(deps.dataDir)) && (0, import_node_fs12.existsSync)(path2)) (0, import_node_fs12.unlinkSync)(path2);
   } catch {
   }
 }
 function relinkAttachment(id, newPath, deps) {
   const existing = deps.listAttachments().find((a) => a.id === id);
   if (!existing) throw new Error(`Attachment not found: ${id}`);
-  if (!(0, import_node_fs11.existsSync)(newPath)) throw new Error(`Replacement file not found: ${newPath}`);
+  if (!(0, import_node_fs12.existsSync)(newPath)) throw new Error(`Replacement file not found: ${newPath}`);
   const updated = {
     ...existing,
-    fileName: (0, import_node_path10.basename)(newPath),
+    fileName: (0, import_node_path11.basename)(newPath),
     missing: false,
     references: existing.references
   };
   const root = attachmentsRoot(deps, existing.workspaceId);
-  (0, import_node_fs11.mkdirSync)(root, { recursive: true });
-  const target = (0, import_node_path10.join)(root, (0, import_node_path10.basename)(existing.relativePath));
-  (0, import_node_fs11.copyFileSync)(newPath, target);
-  const content = (0, import_node_fs11.readFileSync)(target);
+  (0, import_node_fs12.mkdirSync)(root, { recursive: true });
+  const target = (0, import_node_path11.join)(root, (0, import_node_path11.basename)(existing.relativePath));
+  (0, import_node_fs12.copyFileSync)(newPath, target);
+  const content = (0, import_node_fs12.readFileSync)(target);
   updated.size = content.length;
   updated.sha256 = (0, import_node_crypto16.createHash)("sha256").update(content).digest("hex");
   deps.saveAttachment(updated);
@@ -139722,9 +140006,9 @@ function relinkAttachment(id, newPath, deps) {
 }
 function listMissing(workspaceId, deps) {
   return deps.listAttachments(workspaceId).filter((a) => {
-    const path2 = (0, import_node_path10.resolve)(deps.dataDir, a.relativePath);
-    if (!path2.startsWith((0, import_node_path10.resolve)(deps.dataDir))) return true;
-    return !(0, import_node_fs11.existsSync)(path2) || a.missing === true;
+    const path2 = (0, import_node_path11.resolve)(deps.dataDir, a.relativePath);
+    if (!path2.startsWith((0, import_node_path11.resolve)(deps.dataDir))) return true;
+    return !(0, import_node_fs12.existsSync)(path2) || a.missing === true;
   }).map((a) => ({ ...a, missing: true }));
 }
 function listOrphans(workspaceId, deps) {
@@ -139839,7 +140123,7 @@ function createRegistry(container) {
   }
   function resolveGitPath(explicit) {
     if (explicit) return explicit;
-    return (0, import_node_path11.join)(container.dataDir, "git-repos", container.getActiveWorkspaceId());
+    return (0, import_node_path12.join)(container.dataDir, "git-repos", container.getActiveWorkspaceId());
   }
   const capturedExchanges = [];
   const runnerDeps = () => {
@@ -139885,14 +140169,14 @@ function createRegistry(container) {
   });
   const backupDeps = () => ({
     dataDir: container.dataDir,
-    backupDir: (0, import_node_path11.join)(container.dataDir, "backups"),
-    dbFilePath: (0, import_node_path11.join)(container.dataDir, "api_manager.db"),
+    backupDir: (0, import_node_path12.join)(container.dataDir, "backups"),
+    dbFilePath: (0, import_node_path12.join)(container.dataDir, "api_manager.db"),
     exportDataJson: () => exportWorkspaceJson(ensureWorkspace()),
     importDataJson: (json, mode) => importWorkspaceJson(json, mode),
     countTables: () => repos.counts(ensureWorkspace())
   });
   const pluginDeps = () => ({
-    pluginsDir: (0, import_node_path11.join)(container.dataDir, "plugins"),
+    pluginsDir: (0, import_node_path12.join)(container.dataDir, "plugins"),
     listPlugins: () => container.getSetting("plugins.installed", []),
     savePlugin: (p) => {
       const list = container.getSetting("plugins.installed", []);
@@ -140167,10 +140451,13 @@ function createRegistry(container) {
     // app
     "app.ping": async () => ({ pong: Date.now() }),
     "app.info": async () => ({
-      name: "API Manager",
-      version: "1.0.0",
+      name: APP_META.name,
+      version: APP_META.version,
       build: "hub",
-      author: "Local User",
+      developer: APP_META.developer,
+      author: APP_META.developer,
+      email: APP_META.email,
+      license: APP_META.license,
       mode: "hub",
       platform: process.platform,
       dataDir: container.dataDir,
@@ -140558,7 +140845,7 @@ function createRegistry(container) {
       const args = p;
       const wsId = ensureWorkspace(args.workspaceId);
       const entries = repos.listHistory(wsId, { limit: 1e5 }).items;
-      (0, import_node_fs12.writeFileSync)(args.path, JSON.stringify(entries, null, 2));
+      (0, import_node_fs13.writeFileSync)(args.path, JSON.stringify(entries, null, 2));
       return { path: args.path };
     },
     // environments
@@ -140759,7 +141046,7 @@ function createRegistry(container) {
       const args = p;
       const wsId = ensureWorkspace(args.workspaceId);
       let content = args.content;
-      if (!content && args.path) content = (0, import_node_fs12.readFileSync)(args.path, "utf8");
+      if (!content && args.path) content = (0, import_node_fs13.readFileSync)(args.path, "utf8");
       if (!content) throw new Error("import.run requires content or path");
       const mod = await Promise.resolve().then(() => (init_dispatch(), dispatch_exports));
       const normalized = mod.runImport(content, args.format, wsId, args.fileName ?? args.path);
@@ -141239,7 +141526,7 @@ function createRegistry(container) {
       if (!path2) throw new Error("No certificate file associated");
       try {
         const { X509Certificate } = await import("node:crypto");
-        const x = new X509Certificate((0, import_node_fs12.readFileSync)(path2));
+        const x = new X509Certificate((0, import_node_fs13.readFileSync)(path2));
         const from = new Date(x.validFrom);
         const to = new Date(x.validTo);
         const daysLeft = Math.floor((to.getTime() - Date.now()) / 864e5);
@@ -141268,7 +141555,7 @@ function createRegistry(container) {
     // --- git ----------------------------------------------------------------
     "git.init": async (p) => {
       const args = p;
-      const path2 = args.path ?? (0, import_node_path11.join)(container.dataDir, "git-repos", container.getActiveWorkspaceId());
+      const path2 = args.path ?? (0, import_node_path12.join)(container.dataDir, "git-repos", container.getActiveWorkspaceId());
       const wsId = ensureWorkspace(args.workspaceId);
       const result = await gitInit(path2);
       const ws2 = repos.getWorkspace(wsId);
@@ -141613,11 +141900,31 @@ function createRegistry(container) {
     },
     // --- crash recovery ----------------------------------------------------------------------
     "recovery.listDrafts": async (p) => repos.listRecoveryPoints(ensureWorkspace(p.workspaceId)),
+    "recovery.saveDraft": async (p) => {
+      const args = p;
+      repos.saveRecoveryPoint(ensureWorkspace(), args.entityType, args.entityId, args.doc);
+      return { ok: true };
+    },
     "recovery.discard": async (p) => {
       const args = p;
       const points = repos.listRecoveryPoints(ensureWorkspace());
       const match = points.find((x) => x.id === args.id);
       if (match) repos.deleteRecoveryPoint(match.entityType, match.entityId);
+    },
+    // --- UI session (crash-safe; stored OUTSIDE the SQLite DB) -------------------------------
+    "session.get": async () => ({ state: container.session.get(), recovery: container.session.recoveryStatus() }),
+    "session.save": async (p) => {
+      const patch = p.state ?? p;
+      return container.session.save(patch);
+    },
+    "session.markClean": async () => container.session.markCleanExit(),
+    "session.clear": async () => {
+      container.session.clear();
+      return { ok: true };
+    },
+    "session.recoveryStatus": async () => container.session.recoveryStatus(),
+    "session.acknowledgeRecovery": async () => {
+      return container.session.save({ cleanExit: true });
     },
     // --- files / attachments ----------------------------------------------------------------------
     "files.browse": async (p) => browse(filesDeps(), p.path),
@@ -141999,8 +142306,8 @@ function defaultRequestSettings2() {
 
 // src/hub/server.ts
 var import_node_http7 = require("node:http");
-var import_node_fs13 = require("node:fs");
-var import_node_path12 = require("node:path");
+var import_node_fs14 = require("node:fs");
+var import_node_path13 = require("node:path");
 var import_node_crypto17 = require("node:crypto");
 var BAD_REQUEST = "BAD_REQUEST";
 var INTERNAL = "INTERNAL";
@@ -142127,24 +142434,24 @@ async function startHub(opts) {
       }
       if (staticDir && req.method === "GET") {
         let rel = pathname === "/" ? "/index.html" : pathname;
-        rel = (0, import_node_path12.normalize)(rel).replace(/^([/\\])+/, "");
-        const full = (0, import_node_path12.join)(staticDir, rel);
-        if (!full.startsWith((0, import_node_path12.normalize)(staticDir))) {
+        rel = (0, import_node_path13.normalize)(rel).replace(/^([/\\])+/, "");
+        const full = (0, import_node_path13.join)(staticDir, rel);
+        if (!full.startsWith((0, import_node_path13.normalize)(staticDir))) {
           send(res, 403, "forbidden", "text/plain");
           return;
         }
         let file = full;
-        if (!(0, import_node_fs13.existsSync)(file) || !(0, import_node_fs13.statSync)(file).isFile()) {
-          const idx = (0, import_node_path12.join)(staticDir, "index.html");
-          if ((0, import_node_fs13.existsSync)(idx)) file = idx;
+        if (!(0, import_node_fs14.existsSync)(file) || !(0, import_node_fs14.statSync)(file).isFile()) {
+          const idx = (0, import_node_path13.join)(staticDir, "index.html");
+          if ((0, import_node_fs14.existsSync)(idx)) file = idx;
           else {
             send(res, 404, "not found", "text/plain");
             return;
           }
         }
         try {
-          const content = (0, import_node_fs13.readFileSync)(file);
-          const mime = MIME[(0, import_node_path12.extname)(file).toLowerCase()] ?? "application/octet-stream";
+          const content = (0, import_node_fs14.readFileSync)(file);
+          const mime = MIME[(0, import_node_path13.extname)(file).toLowerCase()] ?? "application/octet-stream";
           const cacheControl = /assets[\\/]/.test(file) ? "public, max-age=31536000, immutable" : "no-store";
           res.writeHead(200, { "Content-Type": mime, "Cache-Control": cacheControl });
           res.end(content);
@@ -142294,8 +142601,13 @@ Sec-WebSocket-Accept: ${accept}\r
     url: `http://${host === "0.0.0.0" ? "127.0.0.1" : host}:${actualPort}`,
     token,
     close: async () => {
+      try {
+        opts.container.session.markCleanExit();
+      } catch {
+      }
       for (const c of wsClients) c.close();
       await new Promise((resolve2) => server.close(() => resolve2()));
+      await opts.container.flush();
     }
   };
 }
@@ -142337,17 +142649,17 @@ async function main() {
     const i = args.indexOf(`--${name2}`);
     return i >= 0 ? args[i + 1] : void 0;
   };
-  const dataDir = getArg("data-dir") ?? process.env.API_MANAGER_DATA_DIR ?? (0, import_node_path13.join)((0, import_node_os2.homedir)(), ".api-manager");
+  const dataDir = getArg("data-dir") ?? process.env.API_MANAGER_DATA_DIR ?? (0, import_node_path14.join)((0, import_node_os2.homedir)(), ".api-manager");
   const port = Number(getArg("port") ?? process.env.API_MANAGER_PORT ?? 7654);
   const token = getArg("token") ?? process.env.API_MANAGER_TOKEN;
   const container = await createContainer({ dataDir });
   const registry = createRegistry(container);
   const metaDir = typeof import_meta2 !== "undefined" ? import_meta2.dirname : void 0;
   const rendererDirCandidates = [
-    (0, import_node_path13.join)(process.cwd(), "dist", "renderer"),
-    ...metaDir ? [(0, import_node_path13.join)(metaDir, "..", "renderer"), (0, import_node_path13.join)(metaDir, "renderer")] : []
+    (0, import_node_path14.join)(process.cwd(), "dist", "renderer"),
+    ...metaDir ? [(0, import_node_path14.join)(metaDir, "..", "renderer"), (0, import_node_path14.join)(metaDir, "renderer")] : []
   ];
-  const staticDir = rendererDirCandidates.find((p) => (0, import_node_fs14.existsSync)((0, import_node_path13.join)(p, "index.html")));
+  const staticDir = rendererDirCandidates.find((p) => (0, import_node_fs15.existsSync)((0, import_node_path14.join)(p, "index.html")));
   const handle = await startHub({
     container,
     registry,

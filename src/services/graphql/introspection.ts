@@ -6,7 +6,7 @@
 import { request } from 'undici';
 import type { ApiRequest, KeyValue } from '../../shared/types';
 import { uid } from '../../shared/ids';
-import { INTROSPECTION_QUERY } from '../../core/graphqlx/graphql';
+import { INTROSPECTION_QUERY, prettifyGraphQL } from '../../core/graphqlx/graphql';
 
 export interface GqlIntrospectionType {
   kind: string;
@@ -162,31 +162,7 @@ export function lintQuery(query: string): GqlLintIssue[] {
 }
 
 export function prettifyQuery(query: string): string {
-  const out: string[] = [];
-  let indent = 0;
-  let token = '';
-  const flush = () => {
-    const trimmed = token.trim();
-    if (trimmed) out.push(`${'  '.repeat(indent)}${trimmed}`);
-    token = '';
-  };
-  for (const ch of query) {
-    if (ch === '{') {
-      token = token.trim() + ' {';
-      flush();
-      indent++;
-    } else if (ch === '}') {
-      flush();
-      indent = Math.max(0, indent - 1);
-      out.push(`${'  '.repeat(indent)}}`);
-    } else if (ch === '\n' || ch === ',') {
-      flush();
-    } else {
-      token += ch;
-    }
-  }
-  flush();
-  return out.join('\n').replace(/\n{3,}/g, '\n\n').trim();
+  return prettifyGraphQL(query);
 }
 
 // ---------------------------------------------------------------------------

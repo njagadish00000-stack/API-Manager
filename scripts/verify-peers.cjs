@@ -7,7 +7,112 @@ const http = require('node:http');
 const net = require('node:net');
 const crypto = require('node:crypto');
 
-const NM = '/home/user/API-Manager/node_modules';
+const fs = require('node:fs');
+const path = require('node:path');
+const { spawnSync } = require('node:child_process');
+
+const NM = path.join(__dirname, '..', 'node_modules');
+const PEERS_DIR = process.env.AM_PEERS_DIR || '/tmp/peers';
+
+/* ---------- 0. Self-provision fixture files (certs, proto, plugin, MCP server) -- */
+function provisionFixtures() {
+  fs.mkdirSync(PEERS_DIR, { recursive: true });
+  const write = (name, content) => fs.writeFileSync(path.join(PEERS_DIR, name), content);
+
+  /* gRPC Greeter proto */
+  write('greeter.proto', `syntax = "proto3";
+package greeter;
+service Greeter { rpc SayHello (HelloRequest) returns (HelloReply); }
+message HelloRequest { string name = 1; }
+message HelloReply { string message = 1; int64 time_ms = 2; }
+`);
+
+  /* Self-signed TLS certificate for peer.local / 127.0.0.1 */
+  if (!fs.existsSync(path.join(PEERS_DIR, 'peer-cert.pem')) || !fs.existsSync(path.join(PEERS_DIR, 'peer-key.pem'))) {
+    const r = spawnSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes',
+      '-keyout', path.join(PEERS_DIR, 'peer-key.pem'),
+      '-out', path.join(PEERS_DIR, 'peer-cert.pem'),
+      '-days', '30', '-subj', '/CN=peer.local',
+      '-addext', 'subjectAltName=DNS:peer.local,DNS:localhost,IP:127.0.0.1'], { encoding: 'utf8' });
+    if (r.status !== 0) console.error('[peer:fixtures] openssl cert generation failed:', r.stderr);
+  }
+
+  /* Demo plugin (manifest + CommonJS entry exporting a pre-request hook) */
+  const pluginDir = path.join(PEERS_DIR, 'plugin-demo');
+  fs.mkdirSync(pluginDir, { recursive: true });
+  write('plugin-demo/manifest.json', JSON.stringify({
+    id: 'demo-banner', name: 'Demo Banner Plugin', version: '1.0.0',
+    description: 'Verification fixture plugin', entry: 'index.js',
+    permissions: ['pre-request', 'console'],
+  }, null, 2));
+  write('plugin-demo/index.js', `'use strict';
+module.exports['pre-request'] = function (payload) {
+  payload.headers = payload.headers || [];
+  payload.headers.push({ key: 'x-plugin', value: 'plugin-was-here' });
+  return payload;
+};
+`);
+
+  /* Minimal MCP stdio server (JSON-RPC line-delimited): echo tool, 1 resource, 1 prompt */
+  write('mcp-echo.cjs', `#!/usr/bin/env node
+'use strict';
+let buf = '';
+function send(obj) { process.stdout.write(JSON.stringify(obj) + '\\n'); }
+process.stdin.on('data', (chunk) => {
+  buf += chunk.toString();
+  let idx;
+  while ((idx = buf.indexOf('\\n')) >= 0) {
+    const line = buf.slice(0, idx).trim(); buf = buf.slice(idx + 1);
+    if (!line) continue;
+    let msg; try { msg = JSON.parse(line); } catch { continue; }
+    const { id, method, params } = msg;
+    if (method === 'initialize') {
+      send({ jsonrpc: '2.0', id, result: { protocolVersion: '2024-11-05',
+        capabilities: { tools: {}, resources: {}, prompts: {} },
+        serverInfo: { name: 'mcp-echo-peer', version: '1.0.0' } } });
+      return;
+    }
+    if (method === 'tools/list') {
+      send({ jsonrpc: '2.0', id, result: { tools: [{ name: 'echo', description: 'echoes text',
+        inputSchema: { type: 'object', properties: { text: { type: 'string' } } } }] } });
+      return;
+    }
+    if (method === 'tools/call') {
+      const text = params?.arguments?.text ?? '';
+      send({ jsonrpc: '2.0', id, result: { content: [{ type: 'text', text: 'echo:' + text }] } });
+      return;
+    }
+    if (method === 'resources/list') {
+      send({ jsonrpc: '2.0', id, result: { resources: [{ uri: 'hello://world', name: 'Hello Resource' }] } });
+      return;
+    }
+    if (method === 'prompts/list') {
+      send({ jsonrpc: '2.0', id, result: { prompts: [{ name: 'greet', description: 'greeting prompt' }] } });
+      return;
+    }
+    if (id !== undefined) send({ jsonrpc: '2.0', id, result: {} });
+  }
+});
+`);
+  console.log('[peer:fixtures] provisioned under', PEERS_DIR);
+}
+provisionFixtures();
+
+/* ---------- 0b. Plain HTTP echo server :8081 ---------------------------- */
+http.createServer(async (req, res) => {
+  const chunks = [];
+  for await (const c of req) chunks.push(c);
+  const raw = Buffer.concat(chunks);
+  res.setHeader('Content-Type', 'application/json');
+  res.setHeader('x-echo-peers', 'api-manager-verify');
+  if (req.url === '/status/503') { res.writeHead(503); res.end(JSON.stringify({ error: 'service unavailable' })); return; }
+  if (req.url === '/redirect') { res.writeHead(302, { Location: '/echo?redirected=1' }); res.end(); return; }
+  res.writeHead(200);
+  res.end(JSON.stringify({
+    ok: true, method: req.method, url: req.url,
+    headers: req.headers, body: raw.toString('utf8'), bodyBytes: raw.length,
+  }));
+}).listen(8081, '127.0.0.1', () => console.log('[peer:http] echo on http://127.0.0.1:8081'));
 
 /* ---------- 1. WebSocket echo :8090 ----------------------------------- */
 const { WebSocketServer } = require(NM + '/ws');
@@ -146,7 +251,7 @@ net.createServer((sock) => {
   try {
     const grpc = require(NM + '/@grpc/grpc-js');
     const protoLoader = require(NM + '/@grpc/proto-loader');
-    const def = protoLoader.loadSync('/tmp/peers/greeter.proto', { keepCase: true, longs: String, enums: String, defaults: true, oneofs: true });
+    const def = protoLoader.loadSync(path.join(PEERS_DIR, 'greeter.proto'), { keepCase: true, longs: String, enums: String, defaults: true, oneofs: true });
     const greeter = grpc.loadPackageDefinition(def).greeter;
     const server = new grpc.Server();
     server.addService(greeter.Greeter.service, {

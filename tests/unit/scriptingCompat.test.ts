@@ -54,7 +54,7 @@ describe('pm.expect Postman-style matchers', () => {
       eventName: 'test', request: reqStub(), response: resStub(), stores: s,
       timeoutMs: 5000, consoleTarget: () => undefined, scriptLabel: 'spec',
     });
-    expect(out.outcome.error).toBeUndefined();
+    expect(out.error).toBeUndefined();
     expect(out.outcome.tests.every((t) => t.passed)).toBe(true);
   });
 
@@ -86,7 +86,7 @@ describe('script scope stores capture mutations', () => {
       eventName: 'test', request: reqStub(), response: resStub(), stores: s,
       timeoutMs: 5000, consoleTarget: () => undefined, scriptLabel: 'spec',
     });
-    expect(out.outcome.error).toBeUndefined();
+    expect(out.error).toBeUndefined();
     expect(out.outcome.tests.every((t) => t.passed)).toBe(true);
     expect(s.environment.get('ENV_K')).toBe('V1');
     expect(s.globals.get('GLOB_K')).toBe('V2');

@@ -7,17 +7,36 @@
 /** Escape a literal string for safe inclusion in a RegExp. */
 export const rxEscape = (s: string): string => s.replace(/[-\/\\^$*+?.()|[\]{}]/g, '\\$&');
 
-/** Count case-insensitive literal matches of `query` inside `text` (0 when query empty). */
-export function countMatches(text: string, query: string): number {
-  if (!query) return 0;
-  try { return (text.match(new RegExp(rxEscape(query), 'gi')) ?? []).length; } catch { return 0; }
+export interface SearchOptions {
+  caseSensitive?: boolean;
+  wholeWord?: boolean;
+  regex?: boolean;
 }
 
-/** Wrap case-insensitive literal matches with <mark id="resp-hit-N" class="resp-hit">. Input must already be HTML-escaped. */
-export function markSearch(html: string, query: string): string {
-  if (!query) return html;
-  const re = new RegExp(rxEscape(query), 'gi');
+/** Build the search RegExp (or null when empty/invalid). */
+export function buildSearchRegExp(query: string, opts: SearchOptions = {}): RegExp | null {
+  if (!query) return null;
+  const flags = `g${opts.caseSensitive ? '' : 'i'}`;
+  try {
+    const body = opts.regex ? query : rxEscape(query);
+    const pattern = opts.wholeWord ? `(?<![A-Za-z0-9_])(?:${body})(?![A-Za-z0-9_])` : body;
+    return new RegExp(pattern, flags);
+  } catch { return null; }
+}
+
+/** Count matches of `query` inside `text` (0 when query empty or pattern invalid). */
+export function countMatches(text: string, query: string, opts: SearchOptions = {}): number {
+  const re = buildSearchRegExp(query, opts);
+  if (!re) return 0;
+  return (text.match(re) ?? []).length;
+}
+
+/** Wrap matches with <mark id="resp-hit-N" class="resp-hit">. Input must already be HTML-escaped. */
+export function markSearch(html: string, query: string, opts: SearchOptions = {}): string {
+  const re = buildSearchRegExp(query, opts);
+  if (!re) return html;
   let i = 0;
+  // When highlighting whole-word lookarounds, only mark the captured query span.
   return html.replace(re, (m) => `<mark id="resp-hit-${i++}" class="resp-hit">${m}</mark>`);
 }
 

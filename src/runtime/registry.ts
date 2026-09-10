@@ -13,6 +13,7 @@ import type {
   TestResult, FlowRun, MonitorResult, GovernanceRule,
 } from '../shared/types';
 import { uid } from '../shared/ids';
+import { APP_META } from '../shared/app-meta';
 import type { Repos } from '../services/db/repositories';
 import { now } from '../shared/types';
 import type { AppContainer } from './container';
@@ -511,8 +512,10 @@ export function createRegistry(container: AppContainer): Registry {
     // app
     'app.ping': async () => ({ pong: Date.now() }),
     'app.info': async () => ({
-      name: 'API Manager', version: '1.0.0', build: 'hub',
-      author: 'Local User', mode: 'hub' as const, platform: process.platform,
+      name: APP_META.name, version: APP_META.version, build: 'hub',
+      developer: APP_META.developer, author: APP_META.developer,
+      email: APP_META.email, license: APP_META.license,
+      mode: 'hub' as const, platform: process.platform,
       dataDir: container.dataDir, node: process.version,
     }),
 
@@ -1781,11 +1784,30 @@ export function createRegistry(container: AppContainer): Registry {
 
     // --- crash recovery ----------------------------------------------------------------------
     'recovery.listDrafts': async (p) => repos.listRecoveryPoints(ensureWorkspace((p as { workspaceId?: string }).workspaceId)),
+    'recovery.saveDraft': async (p) => {
+      const args = p as { entityType: string; entityId: string; doc: unknown };
+      repos.saveRecoveryPoint(ensureWorkspace(), args.entityType, args.entityId, args.doc);
+      return { ok: true };
+    },
     'recovery.discard': async (p) => {
       const args = p as { id: string };
       const points = repos.listRecoveryPoints(ensureWorkspace());
       const match = points.find((x) => x.id === args.id);
       if (match) repos.deleteRecoveryPoint(match.entityType, match.entityId);
+    },
+
+    // --- UI session (crash-safe; stored OUTSIDE the SQLite DB) -------------------------------
+    'session.get': async () => ({ state: container.session.get(), recovery: container.session.recoveryStatus() }),
+    'session.save': async (p) => {
+      const patch = (p as { state: Partial<import('../services/session/sessionStore').SessionState> }).state ?? (p as Partial<import('../services/session/sessionStore').SessionState>);
+      return container.session.save(patch);
+    },
+    'session.markClean': async () => container.session.markCleanExit(),
+    'session.clear': async () => { container.session.clear(); return { ok: true }; },
+    'session.recoveryStatus': async () => container.session.recoveryStatus(),
+    'session.acknowledgeRecovery': async () => {
+      // flip the marker so the crash banner does not reappear while keeping the restored state
+      return container.session.save({ cleanExit: true } as never);
     },
 
     // --- files / attachments ----------------------------------------------------------------------

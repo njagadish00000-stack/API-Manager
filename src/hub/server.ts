@@ -254,8 +254,10 @@ export async function startHub(opts: HubOptions): Promise<HubHandle> {
     url: `http://${host === '0.0.0.0' ? '127.0.0.1' : host}:${actualPort}`,
     token,
     close: async () => {
+      try { opts.container.session.markCleanExit(); } catch { /* session marker never blocks shutdown */ }
       for (const c of wsClients) c.close();
       await new Promise<void>((resolve) => server.close(() => resolve()));
+      await opts.container.flush();
     },
   };
 }

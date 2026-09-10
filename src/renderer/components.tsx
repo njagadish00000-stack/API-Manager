@@ -90,11 +90,29 @@ export function KVEditor(props: { items: KeyValue[]; onChange: (items: KeyValue[
 // Tree
 export interface TreeNode<V = unknown> { id: string; label: React.ReactNode; icon?: React.ReactNode; children?: TreeNode<V>[]; value?: V; meta?: React.ReactNode }
 
-export function Tree<V>(props: { nodes: TreeNode<V>[]; selected?: string | null; onSelect?: (n: TreeNode<V>) => void; onContext?: (n: TreeNode<V>, e: React.MouseEvent) => void; depth?: number }): React.ReactElement {
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+export function Tree<V>(props: {
+  nodes: TreeNode<V>[];
+  selected?: string | null;
+  onSelect?: (n: TreeNode<V>) => void;
+  onContext?: (n: TreeNode<V>, e: React.MouseEvent) => void;
+  depth?: number;
+  /** Controlled expansion (persisted across restarts). Expanded = present in set. */
+  expandedIds?: Set<string>;
+  onToggle?: (id: string, expanded: boolean) => void;
+  /** When provided, nodes with children default to expanded instead of collapsed. */
+  defaultExpanded?: boolean;
+}): React.ReactElement {
+  const [internalCollapsed, setInternalCollapsed] = useState<Set<string>>(new Set());
   const depth = props.depth ?? 0;
+  const isExpanded = (id: string): boolean => {
+    if (props.expandedIds) return props.expandedIds.has(id);
+    if (internalCollapsed.has(id)) return false;
+    return props.defaultExpanded ?? true;
+  };
   const toggle = (id: string): void => {
-    setCollapsed((c) => { const n = new Set(c); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+    const next = !isExpanded(id);
+    if (props.onToggle) props.onToggle(id, next);
+    else setInternalCollapsed((c) => { const n = new Set(c); if (next) n.delete(id); else n.add(id); return n; });
   };
   return (
     <div>
@@ -103,14 +121,14 @@ export function Tree<V>(props: { nodes: TreeNode<V>[]; selected?: string | null;
           <div className={`tree-item ${props.selected === n.id ? 'sel' : ''}`}
             onClick={() => { if (n.children?.length) toggle(n.id); props.onSelect?.(n); }}
             onContextMenu={(e) => props.onContext?.(n, e)}>
-            {n.children?.length ? <span style={{ width: 12, display: 'inline-block', flexShrink: 0, color: 'var(--muted)' }}>{collapsed.has(n.id) ? '▸' : '▾'}</span> : <span style={{ width: 12, display: 'inline-block' }} />}
+            {n.children?.length ? <span style={{ width: 12, display: 'inline-block', flexShrink: 0, color: 'var(--muted)' }}>{isExpanded(n.id) ? '▾' : '▸'}</span> : <span style={{ width: 12, display: 'inline-block' }} />}
             {n.icon}
             <span className="ti-label">{n.label}</span>
             {n.meta}
           </div>
-          {n.children && !collapsed.has(n.id) && (
+          {n.children && isExpanded(n.id) && (
             <div className="tree-child">
-              <Tree nodes={n.children} selected={props.selected} onSelect={props.onSelect} onContext={props.onContext} depth={depth + 1} />
+              <Tree {...props} depth={depth + 1} nodes={n.children} />
             </div>
           )}
         </div>
@@ -159,7 +177,15 @@ export function saveBlob(name: string, mime: string, content: string): void {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
-export function JsonView(props: { text: string; nowrap?: boolean; maxHeight?: number; search?: string }): React.ReactElement {
+export function JsonView(props: {
+  text: string;
+  nowrap?: boolean;
+  wrap?: boolean;
+  maxHeight?: number;
+  search?: string;
+  searchOpts?: import('./responseExport').SearchOptions;
+}): React.ReactElement {
+  const wrap = props.wrap ?? (props.nowrap === undefined ? true : !props.nowrap);
   const html = useMemo(() => {
     const t = props.text;
     let out = '';
@@ -167,10 +193,10 @@ export function JsonView(props: { text: string; nowrap?: boolean; maxHeight?: nu
       const parsed = JSON.parse(t) as unknown;
       out = JSON.stringify(parsed, null, 2);
     } catch { out = t; }
-    return markSearch(highlightJson(out), props.search ?? '');
-  }, [props.text, props.search]);
+    return markSearch(highlightJson(out), props.search ?? '', props.searchOpts ?? {});
+  }, [props.text, props.search, props.searchOpts]);
   return (
-    <pre className={`resp-body ${props.nowrap ? 'nowrap' : ''}`} style={props.maxHeight ? { maxHeight: props.maxHeight, overflow: 'auto' } : undefined}
+    <pre className={`resp-body ${wrap ? 'wrap' : 'nowrap'}`} style={props.maxHeight ? { maxHeight: props.maxHeight, overflow: 'auto' } : undefined}
       dangerouslySetInnerHTML={{ __html: html }} />
   );
 }

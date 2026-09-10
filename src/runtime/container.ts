@@ -14,6 +14,7 @@ import { uid } from '../shared/ids';
 import { SqliteDb } from '../services/db/sqlite';
 import { Repos } from '../services/db/repositories';
 import { Vault } from '../services/vault/vault';
+import { SessionStore } from '../services/session/sessionStore';
 import { ConsoleStore } from '../services/console/consoleService';
 import { PipelineDeps } from '../services/http/sendPipeline';
 import { CookieJar } from 'tough-cookie';
@@ -31,6 +32,7 @@ export interface AppContainer {
   db: SqliteDb;
   repos: Repos;
   vault: Vault;
+  session: SessionStore;
   consoleStore: ConsoleStore;
   settings: AppSettings;
   emit: <K extends BridgeEventType>(type: K, payload: BridgeEvents[K]) => void;
@@ -87,9 +89,15 @@ export async function createContainer(config: ContainerConfig): Promise<AppConta
   const autoLock = Number(repos.getSetting('vault.autoLockMinutes') ?? 30);
   if (Number.isFinite(autoLock) && autoLock >= 0) vault.setAutoLockMinutes(autoLock);
 
+  // Crash-safe UI session store (atomic file writes, separate from the SQLite DB)
+  const session = new SessionStore(config.dataDir);
+  if (session.recoveryStatus().recoveredFromCrash) {
+    log('warn', 'session', session.recoveryStatus().note);
+  }
+
   const container: AppContainer = {
     dataDir: config.dataDir,
-    db, repos, vault, consoleStore,
+    db, repos, vault, session, consoleStore,
     get settings() { return settings; },
     emit,
     setEmit(cb) { emitFn = cb; },

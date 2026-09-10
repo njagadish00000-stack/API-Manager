@@ -2,11 +2,26 @@
 /* Full-coverage feature verification for API Manager — exercises every service domain
  * against the running hub + local peers. Prints one line per check with pass/fail. */
 'use strict';
-import { WebSocket } from '/home/user/API-Manager/node_modules/ws/wrapper.mjs';
+import { WebSocket } from 'ws';
 import { writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
-const HUB = 'http://127.0.0.1:7654';
-const TOKEN = process.argv[2] ?? process.env.API_MANAGER_TOKEN ?? '';
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+const argv = process.argv.slice(2);
+const getArg = (name, fallback) => {
+  const i = argv.indexOf(`--${name}`);
+  return i >= 0 ? argv[i + 1] : fallback;
+};
+const positional = [];
+for (let i = 0; i < argv.length; i += 1) {
+  if (argv[i].startsWith('--')) { i += 1; continue; }
+  positional.push(argv[i]);
+}
+const PORT = Number(getArg('port', process.env.API_MANAGER_PORT ?? 7654));
+const HUB = `http://127.0.0.1:${PORT}`;
+const TOKEN = getArg('token', positional[0] ?? process.env.API_MANAGER_TOKEN ?? '');
+const DATA_DIR = getArg('data-dir', process.env.API_MANAGER_DATA_DIR ?? join(ROOT, '.api-manager-verify'));
 const results = [];
 const evLog = [];
 let ws; const subs = { ready: false };
@@ -57,6 +72,39 @@ const run = async () => {
   catch (e) { /roadmap|vault/i.test(e.message) ? ok('workspace.encrypt (honest roadmap→vault alternative)', e.message.slice(0, 90)) : bad('workspace.encrypt', e.message); }
   await expectCall('workspace.makePortable', 'workspace.makePortable');
 
+  /* ============ B0. self-seed fixtures (idempotent) ===================== */
+  let coll = (await call('collection.list', {}).catch(() => [])).find?.((c) => c.name === 'Verify Collection');
+  if (!coll) {
+    coll = await call('collection.create', { name: 'Verify Collection', description: 'auto-seeded by verify-full' });
+    ok('bootstrap: collection.create', coll.id);
+    const r1 = await call('request.create', { collectionId: coll.id, name: 'Echo GET', method: 'GET', url: 'http://127.0.0.1:8081/echo' });
+    await call('request.update', { id: r1.id, patch: {
+      headers: [{ id: 'h1', key: 'Accept', value: 'application/json', enabled: true }],
+      scripts: { preRequest: "pm.variables.set('TAIL','echo');", postResponse: "pm.test('status is 200', () => pm.response.to.have.status(200));" },
+    } });
+    const r2 = await call('request.create', { collectionId: coll.id, name: 'Echo POST JSON', method: 'POST', url: 'http://127.0.0.1:8081/{{TAIL}}' });
+    await call('request.update', { id: r2.id, patch: {
+      headers: [{ id: 'h1', key: 'Content-Type', value: 'application/json', enabled: true }],
+      body: { type: 'json', raw: '{\n  "hello": "{{name}}",\n  "ts": {{$timestamp}}\n}' },
+      scripts: { preRequest: "pm.environment.set('name','World');", postResponse: "pm.test('json ok', () => { pm.expect(pm.response.json().ok).to.eql(true); });" },
+    } });
+    const folder = await call('folder.create', { collectionId: coll.id, name: 'Verify Folder' });
+    const r3 = await call('request.create', { collectionId: coll.id, folderId: folder.id, name: 'Echo in folder', method: 'GET', url: 'http://127.0.0.1:8081/echo?in=folder' });
+    ok('bootstrap: requests + folder', `req ${r1.id.slice(0, 8)}/${r2.id.slice(0, 8)}/${r3.id.slice(0, 8)} folder ${folder.id.slice(0, 8)}`);
+  } else ok('bootstrap: Verify Collection already present', coll.id);
+  let env0 = (await call('environment.list', {})).find?.((e) => e.name === 'Verify Env');
+  if (!env0) {
+    env0 = await call('environment.create', { name: 'Verify Env' });
+    await call('environment.update', { id: env0.id, patch: { variables: [
+      { id: 'v1', key: 'baseUrl', value: 'http://127.0.0.1:8081', enabled: true, type: 'default' },
+      { id: 'v2', key: 'name', value: 'World', enabled: true, type: 'default' },
+      { id: 'v3', key: 'TAIL', value: 'echo', enabled: true, type: 'default' },
+      { id: 'v4', key: 'API_SECRET', value: 'shh-secret', enabled: true, type: 'secret' },
+    ] } });
+    ok('bootstrap: environment.create + variables', env0.id);
+  } else ok('bootstrap: Verify Env already present', env0.id);
+  await call('environment.setActive', { id: env0.id }).catch(() => null);
+
   /* ============ C. tags, favorites, recovery, console, audit ============ */
   const tag = await expectCall('tag.save', 'tag.save', { tag: { name: 'verify-tag', color: '#3b82f6' } }, (r) => String(r.name) === 'verify-tag' && !!r.id);
   if (tag?.id) {
@@ -64,7 +112,7 @@ const run = async () => {
     await expectCall('tag.delete', 'tag.delete', { id: tag.id }, () => true);
   }
 
-  const req0 = (await call('request.list', {})).items?.[0] ?? (await call('request.list', {}))[0];
+  const req0 = (await call('request.list', {})).items.find((r) => /^https?:\/\//.test(r.url)) ?? (await call('request.list', {})).items[0];
   await expectCall('favorite.toggle', 'favorite.toggle', { entityType: 'request', entityId: req0.id });
   await expectCall('favorite.list', 'favorite.list', {}, () => true);
   await expectCall('favorite.toggle (off)', 'favorite.toggle', { entityType: 'request', entityId: req0.id });
@@ -135,12 +183,13 @@ const run = async () => {
   await expectCall('search.replace (dryRun)', 'search.replace', { query: 'echo', replace: 'echox', limit: 5, dryRun: true }, () => true);
 
   writeFileSync('/tmp/verify-out/note.md', '# verify attachment\n');
-  writeFileSync('/tmp/am-final-test/note.md', '# verify attachment\n');
+  mkdirSync(DATA_DIR, { recursive: true });
+  writeFileSync(join(DATA_DIR, 'note.md'), '# verify attachment\n');
   try { await call('files.readText', { path: '/tmp/verify-out/note.md' }); bad('files.readText (traversal blocked)', 'expected traversal-block error'); }
   catch (e) { /traversal/i.test(e.message) ? ok('files.readText (traversal blocked)', e.message.slice(0, 70)) : bad('files.readText (traversal blocked)', e.message); }
   const att = await expectCall('files.addAttachment', 'files.addAttachment', { path: '/tmp/verify-out/note.md' }, (r) => r?.id || r?.path);
   if (att?.path) await expectCall('files.readText (listed path)', 'files.readText', { path: att.path }, (r) => String(r).includes('verify attachment'));
-  else await expectCall('files.readText (workspace root)', 'files.readText', { path: '/tmp/am-final-test/note.md' }, (r) => String(r).includes('verify attachment'));
+  else await expectCall('files.readText (workspace root)', 'files.readText', { path: 'note.md' }, (r) => String(r).includes('verify attachment'));
   await expectCall('files.listAttachments', 'files.listAttachments', {}, () => true);
   await expectCall('files.missing', 'files.missing', {}, () => true);
   await expectCall('files.orphans', 'files.orphans', {}, () => true);
@@ -237,11 +286,11 @@ const run = async () => {
     rec('docs.export file exists', existsSync('/tmp/verify-out/docs.html'), 'bytes=' + (existsSync('/tmp/verify-out/docs.html') ? 1 : 0));
     void docs;
     let served;
-    try { served = await call('docs.serve', { collectionId: docCol.id, port: 8094 }); ok('docs.serve', JSON.stringify(served).slice(0, 90)); }
+    try { served = await call('docs.serve', { collectionId: docCol.id, port: 0 }); ok('docs.serve', JSON.stringify(served).slice(0, 90)); }
     catch (e) { bad('docs.serve', e.message); }
-    if (served) {
+    if (served?.url) {
       await sleep(200);
-      const page = await fetch(`http://127.0.0.1:${served.port ?? 8094}/`).catch(() => null);
+      const page = await fetch(served.url + '/').catch(() => null);
       rec('docs.serve reachable', Boolean(page && page.ok), page ? `HTTP ${page.status}` : 'unreachable');
     }
   }

@@ -49,9 +49,14 @@ async function nativeCall(method: string, params: Record<string, never>): Promis
   }
 }
 
-async function createWindow(): Promise<BrowserWindow> {
+async function createWindow(container: Awaited<ReturnType<typeof createContainer>>): Promise<BrowserWindow> {
+  const w = container.session.get().window;
   const win = new BrowserWindow({
-    width: 1480, height: 960, minWidth: 1100, minHeight: 700,
+    width: w?.width ?? 1480,
+    height: w?.height ?? 960,
+    x: w?.x,
+    y: w?.y,
+    minWidth: 1100, minHeight: 700,
     title: 'API Manager', backgroundColor: '#0f1115',
     webPreferences: {
       preload: join(__dirname, 'preload.cjs'),
@@ -60,7 +65,27 @@ async function createWindow(): Promise<BrowserWindow> {
     },
     show: false,
   });
+  if (w?.maximized) win.maximize();
+  else if (w?.fullscreen) win.setFullScreen(true);
   win.on('ready-to-show', () => win.show());
+
+  // Persist window bounds (debounced) — part of crash-safe session restoration
+  let timer: NodeJS.Timeout | null = null;
+  const saveBounds = (): void => {
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => {
+      const maximized = win.isMaximized();
+      const fullscreen = win.isFullScreen();
+      const bounds = win.getNormalBounds?.() ?? win.getBounds();
+      container.session.save({ window: { ...bounds, maximized, fullscreen } });
+    }, 400);
+  };
+  win.on('resize', saveBounds);
+  win.on('move', saveBounds);
+  win.on('maximize', saveBounds);
+  win.on('unmaximize', saveBounds);
+  win.on('enter-full-screen', saveBounds);
+  win.on('leave-full-screen', saveBounds);
 
   Menu.setApplicationMenu(null);
 
@@ -69,7 +94,7 @@ async function createWindow(): Promise<BrowserWindow> {
     callback({
       responseHeaders: {
         ...details.responseHeaders,
-        'Content-Security-Policy': ["default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: http: https:; script-src 'self'"],
+        'Content-Security-Policy': ["default-src 'self'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' ws: wss: http: https:; script-src 'self'"],
       },
     });
   });
@@ -104,13 +129,18 @@ async function main(): Promise<void> {
     console.log(`[api-manager] hub on ${handle.url}`);
   }
 
-  mainWindow = await createWindow();
-  app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) void createWindow().then((w) => { mainWindow = w; }); });
+  mainWindow = await createWindow(container);
+  app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) void createWindow(container).then((w) => { mainWindow = w; }); });
 
-  app.on('before-quit', () => { void container.flush(); });
+  const gracefulShutdown = (): void => {
+    try { container.session.markCleanExit(); } catch { /* never block quit on session I/O */ }
+    void container.flush();
+  };
+  app.on('before-quit', gracefulShutdown);
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
-      void container.flush().then(() => app.quit());
+      gracefulShutdown();
+      app.quit();
     }
   });
 }

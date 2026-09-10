@@ -134,10 +134,19 @@ export function detectSoapFault(xml: string): SoapFaultInfo {
     const re = new RegExp(`<(?:\\w+:)?${tag}[^>]*>([\\s\\S]*?)</(?:\\w+:)?${tag}>`);
     return re.exec(xml)?.[1]?.trim();
   };
+  // SOAP 1.2 nests the text inside <Code><Value>…</Value></Code> and
+  // <Reason><Text xml:lang="…">…</Text></Reason>; unwrap when still elementy.
+  const innerText = (s: string | undefined): string | undefined => {
+    if (!s) return s;
+    const m = />([^<>]+)<\//.exec(s);
+    return m ? m[1].trim() : s;
+  };
+  const code12 = innerText(pick('Code')) ?? pick('Value');
+  const reason12 = innerText(pick('Reason')) ?? pick('Text');
   return {
     isFault: true,
-    code: pick('faultcode') ?? pick('Code') ?? pick('Value'),
-    reason: pick('faultstring') ?? pick('Reason') ?? pick('Text'),
+    code: pick('faultcode') ?? code12,
+    reason: pick('faultstring') ?? reason12,
     detail: pick('detail') ?? pick('Detail'),
   };
 }
